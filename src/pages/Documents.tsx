@@ -1,14 +1,15 @@
+// src/pages/Documents.tsx
 import { useEffect, useState, useCallback } from 'react'
 import { Upload, FileText, Download, Trash2 } from 'lucide-react'
 import { supabase, type Database } from '../lib/supabase'
-import { useClient } from '../hooks/useClient'
+import { useClient } from '../hooks/useClient' // Correct import for useClient
 import toast from 'react-hot-toast'
 
 type Document = Database['public']['Tables']['documents']['Row']
 type Move = Database['public']['Tables']['moves']['Row']
 
 export function Documents() {
-  const { client } = useClient()
+  const { client } = useClient() // Removed 'session' as it's not returned by useClient
   const [documents, setDocuments] = useState<Document[]>([])
   const [moves, setMoves] = useState<Move[]>([])
   const [selectedMoveId, setSelectedMoveId] = useState<string>('')
@@ -20,7 +21,6 @@ export function Documents() {
     if (!client) return
 
     const fetchData = async () => {
-      // Fetch moves
       const { data: movesData, error: movesError } = await supabase
         .from('moves')
         .select('*')
@@ -36,7 +36,6 @@ export function Documents() {
         }
       }
 
-      // Fetch documents
       const { data: documentsData, error: documentsError } = await supabase
         .from('documents')
         .select('*')
@@ -56,8 +55,9 @@ export function Documents() {
   }, [client])
 
   const uploadFile = useCallback(async (file: File) => {
-    if (!selectedMoveId) {
-      toast.error('Please select a move first')
+    // Use client?.company?.id instead of session?.user?.user_metadata?.company_id
+    if (!selectedMoveId || !client?.company?.id) {
+      toast.error('Missing move or company context')
       return
     }
 
@@ -68,21 +68,22 @@ export function Documents() {
     setUploading(true)
 
     try {
-      // Upload to Supabase storage
       const { error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(filePath, file)
+        .upload(filePath, file, {
+          upsert: false,
+          cacheControl: '3600',
+          metadata: {
+            company_id: client.company.id, // Corrected: Use client.company.id
+          },
+        })
 
-      if (uploadError) {
-        throw uploadError
-      }
+      if (uploadError) throw uploadError
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('documents')
         .getPublicUrl(filePath)
 
-      // Save document record
       const { data, error: insertError } = await supabase
         .from('documents')
         .insert({
@@ -95,9 +96,7 @@ export function Documents() {
         .select()
         .single()
 
-      if (insertError) {
-        throw insertError
-      }
+      if (insertError) throw insertError
 
       setDocuments(prev => [data, ...prev])
       toast.success(`${file.name} uploaded successfully`)
@@ -107,23 +106,46 @@ export function Documents() {
     } finally {
       setUploading(false)
     }
-  }, [selectedMoveId])
+  }, [selectedMoveId, client]) // Dependency array updated to use 'client'
+
+  const deleteDocument = async (doc: Document) => {
+    try {
+      const pathSegments = doc.file_url.split('public/documents/')
+      if (pathSegments.length < 2) throw new Error('Invalid file URL format for deletion.')
+      const filePathInBucket = pathSegments[1]
+
+      const { error: storageError } = await supabase.storage
+        .from('documents')
+        .remove([filePathInBucket])
+
+      if (storageError) throw storageError
+
+      const { error: dbError } = await supabase
+        .from('documents')
+        .delete()
+        .eq('id', doc.id)
+
+      if (dbError) throw dbError
+
+      setDocuments(prev => prev.filter(d => d.id !== doc.id))
+      toast.success('Document deleted successfully')
+    } catch (error: any) {
+      console.error('Error deleting document:', error)
+      toast.error(`Failed to delete document: ${error.message}`)
+    }
+  }
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true)
-    } else if (e.type === "dragleave") {
-      setDragActive(false)
-    }
+    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true)
+    else if (e.type === 'dragleave') setDragActive(false)
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setDragActive(false)
-
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const files = Array.from(e.dataTransfer.files)
       files.forEach(uploadFile)
@@ -134,20 +156,6 @@ export function Documents() {
     if (e.target.files) {
       const files = Array.from(e.target.files)
       files.forEach(uploadFile)
-    }
-  }
-
-  const deleteDocument = async (doc: Document) => {
-    const { error } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', doc.id)
-
-    if (error) {
-      toast.error('Failed to delete document')
-    } else {
-      setDocuments(prev => prev.filter(d => d.id !== doc.id))
-      toast.success('Document deleted')
     }
   }
 
@@ -173,6 +181,7 @@ export function Documents() {
 
   return (
     <div className="p-4 space-y-6">
+      {/* Content omitted for brevity; same UI as before */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
         <p className="text-gray-600 mt-1">Upload and manage your move documents</p>
