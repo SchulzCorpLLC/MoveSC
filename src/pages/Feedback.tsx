@@ -22,12 +22,15 @@ export function Feedback() {
   const navigate = useNavigate()
   const { client } = useClient()
   const moveId = searchParams.get('move')
-  
+
   const [move, setMove] = useState<Move | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [rating, setRating] = useState(0)
   const [hoveredRating, setHoveredRating] = useState(0)
+
+  // NEW: Track if feedback has already been submitted for this move
+  const [hasSubmittedFeedback, setHasSubmittedFeedback] = useState(false)
 
   const {
     register,
@@ -64,7 +67,22 @@ export function Feedback() {
       setLoading(false)
     }
 
+    const checkExistingFeedback = async () => {
+      if (!moveId) return
+      const { data, error } = await supabase
+        .from('feedback')
+        .select('id')
+        .eq('move_id', moveId)
+        .single()
+
+      if (data) {
+        setHasSubmittedFeedback(true)
+      }
+      // No error handling needed here, assume no feedback if none found
+    }
+
     fetchMove()
+    checkExistingFeedback()
   }, [moveId, client, navigate])
 
   const onSubmit = async (data: FeedbackForm) => {
@@ -84,6 +102,7 @@ export function Feedback() {
       toast.error('Failed to submit feedback')
     } else {
       toast.success('Thank you for your feedback!')
+      setHasSubmittedFeedback(true) // Update local state to prevent re-submission
       navigate('/dashboard')
     }
 
@@ -131,65 +150,74 @@ export function Feedback() {
         </div>
       </div>
 
-      {/* Feedback Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="space-y-6">
-          {/* Rating */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              How would you rate your moving experience?
-            </label>
-            <div className="flex items-center space-x-2">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => handleStarClick(star)}
-                  onMouseEnter={() => setHoveredRating(star)}
-                  onMouseLeave={() => setHoveredRating(0)}
-                  className="p-1"
-                >
-                  <Star
-                    className={`h-8 w-8 transition-colors ${
-                      star <= (hoveredRating || rating)
-                        ? 'text-yellow-400 fill-current'
-                        : 'text-gray-300'
-                    }`}
-                  />
-                </button>
-              ))}
-            </div>
-            {errors.stars && (
-              <p className="mt-2 text-sm text-red-600">Please select a rating</p>
-            )}
-          </div>
-
-          {/* Comment */}
-          <div>
-            <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-2">
-              Additional Comments (Optional)
-            </label>
-            <textarea
-              {...register('comment')}
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Tell us about your experience..."
-            />
-            {errors.comment && (
-              <p className="mt-1 text-sm text-red-600">{errors.comment.message}</p>
-            )}
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={submitting || rating === 0}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {submitting ? 'Submitting...' : 'Submit Feedback'}
-          </button>
+      {/* Conditionally show feedback form or "already submitted" message */}
+      {hasSubmittedFeedback ? (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+          <h3 className="text-green-900 font-medium mb-2">Feedback Already Submitted!</h3>
+          <p className="text-green-800 text-sm">
+            Thank you for your feedback. You have already provided feedback for this move.
+          </p>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="space-y-6">
+            {/* Rating */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                How would you rate your moving experience?
+              </label>
+              <div className="flex items-center space-x-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => handleStarClick(star)}
+                    onMouseEnter={() => setHoveredRating(star)}
+                    onMouseLeave={() => setHoveredRating(0)}
+                    className="p-1"
+                  >
+                    <Star
+                      className={`h-8 w-8 transition-colors ${
+                        star <= (hoveredRating || rating)
+                          ? 'text-yellow-400 fill-current'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  </button>
+                ))}
+              </div>
+              {errors.stars && (
+                <p className="mt-2 text-sm text-red-600">Please select a rating</p>
+              )}
+            </div>
+
+            {/* Comment */}
+            <div>
+              <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-2">
+                Additional Comments (Optional)
+              </label>
+              <textarea
+                {...register('comment')}
+                rows={4}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Tell us about your experience..."
+              />
+              {errors.comment && (
+                <p className="mt-1 text-sm text-red-600">{errors.comment.message}</p>
+              )}
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={submitting || rating === 0}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {submitting ? 'Submitting...' : 'Submit Feedback'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Thank You Message */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
