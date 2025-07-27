@@ -7,10 +7,17 @@ import { useClient } from '../hooks/useClient'
 import { useAuth } from '../hooks/useAuth'
 import toast from 'react-hot-toast'
 
+// Example regex for a basic phone number validation (adjust as needed)
+// This regex allows optional leading +, digits, spaces, hyphens, and parentheses.
+const phoneRegex = /^\+?[0-9\s\-()]{7,20}$/;
+
 const profileSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
-  phone: z.string().optional(),
-})
+  phone: z.string().optional().refine((val) => {
+    if (val === undefined || val === '') return true; // Allow empty or undefined
+    return phoneRegex.test(val);
+  }, 'Please enter a valid phone number'),
+});
 
 type ProfileForm = z.infer<typeof profileSchema>
 
