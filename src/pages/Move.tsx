@@ -5,21 +5,33 @@ import { supabase, type Database } from '../lib/supabase'
 import { StatusBadge } from '../components/StatusBadge'
 import toast from 'react-hot-toast'
 
-type Move = Database['public']['Tables']['moves']['Row']
+type Quote = Database['public']['Tables']['quotes']['Row']
+type Company = Database['public']['Tables']['companies']['Row']
+
+// Extend the Move type to include related quotes and company data
+type MoveWithDetails = Database['public']['Tables']['moves']['Row'] & {
+  quotes: Quote[]
+  company: Company
+}
 
 export function Move() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [move, setMove] = useState<Move | null>(null)
+  const [move, setMove] = useState<MoveWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!id) return
 
     const fetchMove = async () => {
+      // Fetch move details, including associated quotes and company information
       const { data, error } = await supabase
         .from('moves')
-        .select('*')
+        .select(`
+          *,
+          quotes(*),
+          company:companies(*)
+        `)
         .eq('id', id)
         .single()
 
@@ -28,7 +40,7 @@ export function Move() {
         toast.error('Move not found')
         navigate('/dashboard')
       } else {
-        setMove(data)
+        setMove(data as MoveWithDetails)
       }
       setLoading(false)
     }
@@ -37,8 +49,134 @@ export function Move() {
   }, [id, navigate])
 
   const handleDownloadInvoice = () => {
-    // Placeholder for invoice download
-    toast.success('Invoice download will be available soon')
+    if (!move) {
+      toast.error('Move details not loaded.')
+      return
+    }
+
+    const approvedQuote = move.quotes.find(q => q.approved) || move.quotes[0]
+
+    if (!approvedQuote) {
+      toast.error('No approved quote found for this move.')
+      return
+    }
+
+    const companyName = move.company?.name || 'Moving Company'
+    const companyLogo = move.company?.logo_url || ''
+    const moveDate = new Date(move.date).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+
+    const lineItemsHtml = (approvedQuote.line_items || [])
+      .map((item: any) => `
+        <tr class="border-b border-gray-200">
+          <td class="py-2 px-4 text-left">${item.description || item.name}</td>
+          <td class="py-2 px-4 text-right">$${(item.amount || item.price || 0).toFixed(2)}</td>
+        </tr>
+      `)
+      .join('')
+
+    const invoiceHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Invoice for Move ${move.id.substring(0, 8)}</title>
+        <style>
+          body { font-family: 'Helvetica Neue', 'Helvetica', Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+          .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .header img { max-height: 60px; margin-bottom: 10px; }
+          .header h1 { font-size: 28px; color: #2c3e50; margin: 0; }
+          .details { display: flex; justify-content: space-between; margin-bottom: 30px; }
+          .details div { width: 48%; }
+          .details p { margin: 5px 0; font-size: 14px; }
+          .details strong { color: #555; }
+          .section-title { font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+          th { background-color: #f8f8f8; font-weight: bold; }
+          .totals { text-align: right; }
+          .totals div { display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px; }
+          .totals .total-amount { font-size: 22px; font-weight: bold; color: #2c3e50; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px; }
+          .footer { text-align: center; font-size: 12px; color: #777; margin-top: 40px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            ${companyLogo ? `<img src="${companyLogo}" alt="${companyName} Logo">` : ''}
+            <h1>${companyName}</h1>
+            <p>Invoice for Move: ${move.origin} to ${move.destination}</p>
+            <p>Date: ${moveDate}</p>
+          </div>
+
+          <div class="details">
+            <div>
+              <p><strong>Invoice ID:</strong> ${approvedQuote.id.substring(0, 8)}</p>
+              <p><strong>Move ID:</strong> ${move.id.substring(0, 8)}</p>
+            </div>
+            <div>
+              <p><strong>Client:</strong> ${move.client_id}</p> <!-- You might want to fetch client name here -->
+              <p><strong>Status:</strong> ${move.status.replace(/_/g, ' ')}</p>
+            </div>
+          </div>
+
+          <h2 class="section-title">Quote Breakdown</h2>
+          <table>
+            <thead>
+              <tr>
+                <th class="text-left">Description</th>
+                <th class="text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lineItemsHtml}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div>
+              <span>Subtotal:</span>
+              <span>$${approvedQuote.subtotal.toFixed(2)}</span>
+            </div>
+            <div>
+              <span>Tax:</span>
+              <span>$${approvedQuote.tax.toFixed(2)}</span>
+            </div>
+            <div class="total-amount">
+              <span>Total:</span>
+              <span>$${approvedQuote.total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          ${approvedQuote.client_notes ? `
+            <h2 class="section-title">Client Notes</h2>
+            <p>${approvedQuote.client_notes}</p>
+          ` : ''}
+
+          <div class="footer">
+            <p>Thank you for your business!</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(invoiceHtml)
+      printWindow.document.close()
+      printWindow.focus() // Required for IE
+      printWindow.print()
+      setTimeout(() => {
+        printWindow.close()
+      }, 500) // Close after a short delay
+    } else {
+      toast.error('Please allow pop-ups for invoice download.')
+    }
   }
 
   if (loading) {
