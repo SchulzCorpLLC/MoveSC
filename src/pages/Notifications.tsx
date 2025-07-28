@@ -1,5 +1,5 @@
 import { Bell, CheckCheck } from 'lucide-react'
-import { useNotifications } from '../hooks/useNotifications' // Import the new hook
+import { useNotifications } from '../context/NotificationContext' // Import from context
 import toast from 'react-hot-toast'
 
 export function Notifications() {
