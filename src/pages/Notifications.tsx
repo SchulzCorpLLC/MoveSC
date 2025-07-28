@@ -62,7 +62,11 @@ export function Notifications() {
                 key={notification.id}
                 onClick={() => {
                   console.log('Notifications.tsx: Notification item clicked, ID:', notification.id, 'Read status:', notification.read); // Debug log
-                  !notification.read && handleMarkAsRead(notification.id)
+                  if (!notification.read) {
+                    handleMarkAsRead(notification.id);
+                  } else {
+                    console.log('Notifications.tsx: Notification already read, not calling handleMarkAsRead.');
+                  }
                 }}
                 className={`p-6 transition-colors cursor-pointer ${
                   !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-600 hover:bg-blue-100' : 'hover:bg-gray-50'
