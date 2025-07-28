@@ -11,6 +11,8 @@ import { Documents } from './pages/Documents'
 import { Notifications } from './pages/Notifications'
 import { Feedback } from './pages/Feedback'
 import { Profile } from './pages/Profile'
+import { ForgotPassword } from './pages/ForgotPassword' // Import new component
+import { ResetPassword } from './pages/ResetPassword' // Import new component
 import { NotificationProvider } from './context/NotificationContext' // Import NotificationProvider
 
 function App() {
@@ -20,6 +22,8 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} /> {/* New route */}
+          <Route path="/reset-password" element={<ResetPassword />} /> {/* New route */}
           <Route path="/" element={
             <ProtectedRoute>
               <NotificationProvider> {/* Wrap with NotificationProvider */}
