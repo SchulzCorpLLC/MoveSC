@@ -6,7 +6,6 @@ export function Notifications() {
   const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = useNotifications() // Use the new hook
 
   const handleMarkAsRead = async (notificationId: string) => {
-    console.log('Notifications.tsx: handleMarkAsRead called for ID:', notificationId); // Debug log
     const { error } = await markAsRead(notificationId)
     if (!error) {
       toast.success('Notification marked as read')
@@ -16,7 +15,6 @@ export function Notifications() {
   }
 
   const handleMarkAllAsRead = async () => {
-    console.log('Notifications.tsx: handleMarkAllAsRead called'); // Debug log
     const { error } = await markAllAsRead()
     if (!error) {
       toast.success('All notifications marked as read')
@@ -61,11 +59,8 @@ export function Notifications() {
               <div
                 key={notification.id}
                 onClick={() => {
-                  console.log('Notifications.tsx: Notification item clicked, ID:', notification.id, 'Read status:', notification.read); // Debug log
                   if (!notification.read) {
                     handleMarkAsRead(notification.id);
-                  } else {
-                    console.log('Notifications.tsx: Notification already read, not calling handleMarkAsRead.');
                   }
                 }}
                 className={`p-6 transition-colors cursor-pointer ${
