@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react' // Import useMemo
 import { supabase, type Database } from '../lib/supabase'
 import { useClient } from './useClient'
 
@@ -8,12 +8,15 @@ export function useNotifications() {
   const { client } = useClient()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
-  const [unreadCount, setUnreadCount] = useState(0)
+
+  // Derive unreadCount from notifications state using useMemo for optimization
+  const unreadCount = useMemo(() => {
+    return notifications.filter(n => !n.read).length
+  }, [notifications])
 
   useEffect(() => {
     if (!client) {
       setNotifications([])
-      setUnreadCount(0)
       setLoading(false)
       return
     }
@@ -28,17 +31,15 @@ export function useNotifications() {
       if (error) {
         console.error('Error fetching notifications:', error)
         setNotifications([])
-        setUnreadCount(0)
       } else {
         setNotifications(data || [])
-        setUnreadCount(data?.filter(n => !n.read).length || 0)
       }
       setLoading(false)
     }
 
     fetchNotifications()
 
-    // Optional: Set up real-time subscription for notifications
+    // Set up real-time subscription for notifications
     const subscription = supabase
       .channel('public:notifications')
       .on(
@@ -50,8 +51,8 @@ export function useNotifications() {
           filter: `client_id=eq.${client.id}`
         },
         (payload) => {
-          // Re-fetch or update state based on payload
-          // For simplicity, let's re-fetch all notifications
+          // When a change occurs, re-fetch all notifications to ensure consistency
+          // This handles cases where notifications are added/deleted/updated from outside the app
           fetchNotifications();
         }
       )
@@ -60,7 +61,7 @@ export function useNotifications() {
     return () => {
       supabase.removeChannel(subscription);
     }
-  }, [client])
+  }, [client]) // Dependency array: only re-run effect if client changes
 
   // Function to mark a single notification as read
   const markAsRead = async (notificationId: string) => {
@@ -70,12 +71,12 @@ export function useNotifications() {
       .eq('id', notificationId)
 
     if (!error) {
+      // Optimistically update local state
       setNotifications(prev =>
         prev.map(notif =>
           notif.id === notificationId ? { ...notif, read: true } : notif
         )
       )
-      setUnreadCount(prev => Math.max(0, prev - 1))
     }
     return { error }
   }
@@ -91,10 +92,10 @@ export function useNotifications() {
       .in('id', unreadIds)
 
     if (!error) {
+      // Optimistically update local state
       setNotifications(prev =>
         prev.map(notif => ({ ...notif, read: true }))
       )
-      setUnreadCount(0)
     }
     return { error }
   }
