@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react' // Import useMemo
+import { useEffect, useState, useMemo } from 'react'
 import { supabase, type Database } from '../lib/supabase'
 import { useClient } from './useClient'
 
@@ -9,14 +9,14 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Derive unreadCount from notifications state using useMemo for optimization
   const unreadCount = useMemo(() => {
     const count = notifications.filter(n => !n.read).length;
-    console.log('useNotifications: unreadCount calculated:', count, 'from notifications:', notifications.map(n => ({id: n.id, read: n.read}))); // Debug log
+    console.log('useNotifications: unreadCount calculated:', count, 'from notifications:', notifications.map(n => ({id: n.id, read: n.read})));
     return count;
   }, [notifications])
 
   useEffect(() => {
+    console.log('useNotifications: useEffect running. Client:', client);
     if (!client) {
       setNotifications([])
       setLoading(false)
@@ -24,7 +24,7 @@ export function useNotifications() {
     }
 
     const fetchNotifications = async () => {
-      setLoading(true); // Set loading true before fetch
+      setLoading(true);
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
@@ -35,70 +35,70 @@ export function useNotifications() {
         console.error('useNotifications: Error fetching notifications:', error)
         setNotifications([])
       } else {
-        console.log('useNotifications: Fetched notifications:', data?.map(n => ({id: n.id, read: n.read}))); // Debug log
+        console.log('useNotifications: Fetched notifications:', data?.map(n => ({id: n.id, read: n.read})));
         setNotifications(data || [])
       }
-      setLoading(false); // Set loading false after fetch
+      setLoading(false);
     }
 
     fetchNotifications()
 
-    // Set up real-time subscription for notifications
+    // Temporarily comment out the real-time subscription
+    /*
     const subscription = supabase
       .channel('public:notifications')
       .on(
         'postgres_changes',
         {
-          event: '*', // Listen to INSERT, UPDATE, DELETE
+          event: '*',
           schema: 'public',
           table: 'notifications',
           filter: `client_id=eq.${client.id}`
         },
         (payload) => {
-          console.log('useNotifications: Realtime change detected:', payload); // Debug log
-          // When a change occurs, re-fetch all notifications to ensure consistency
-          // This handles cases where notifications are added/deleted/updated from outside the app
+          console.log('useNotifications: Realtime change detected:', payload);
           fetchNotifications();
         }
       )
       .subscribe()
 
     return () => {
+      console.log('useNotifications: Cleaning up subscription.');
       supabase.removeChannel(subscription);
     }
-  }, [client]) // Dependency array: only re-run effect if client changes
+    */
+    // Return an empty cleanup function if no subscription is active
+    return () => {};
+  }, [client])
 
-  // Function to mark a single notification as read
   const markAsRead = async (notificationId: string) => {
-    console.log('useNotifications: markAsRead called for ID:', notificationId); // Debug log
+    console.log('useNotifications: markAsRead called for ID:', notificationId);
     const { error } = await supabase
       .from('notifications')
       .update({ read: true })
       .eq('id', notificationId)
 
     if (!error) {
-      // Optimistically update local state
       setNotifications(prev => {
         const updated = prev.map(notif => {
           if (notif.id === notificationId) {
-            console.log('useNotifications: Optimistically marking as read:', notif.id); // Debug log
+            console.log('useNotifications: Optimistically marking as read:', notif.id);
             return { ...notif, read: true };
           }
           return notif;
         });
-        console.log('useNotifications: Notifications state after optimistic update:', updated.map(n => ({id: n.id, read: n.read}))); // Debug log
+        console.log('useNotifications: Notifications state after optimistic update:', updated.map(n => ({id: n.id, read: n.read})));
         return updated;
       });
     } else {
-      console.error('useNotifications: Error marking as read in DB:', error); // Debug log
+      console.error('useNotifications: Error marking as read in DB:', error);
     }
     return { error }
   }
 
-  // Function to mark all notifications as read
   const markAllAsRead = async () => {
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id)
-    console.log('useNotifications: markAllAsRead called for IDs:', unreadIds); // Debug log
+    console.log('useNotifications: markAllAsRead called for IDs:', unreadIds);
     if (unreadIds.length === 0) return { error: null }
 
     const { error } = await supabase
@@ -107,14 +107,13 @@ export function useNotifications() {
       .in('id', unreadIds)
 
     if (!error) {
-      // Optimistically update local state
       setNotifications(prev => {
         const updated = prev.map(notif => ({ ...notif, read: true }));
-        console.log('useNotifications: Notifications state after optimistic mark all:', updated.map(n => ({id: n.id, read: n.read}))); // Debug log
+        console.log('useNotifications: Notifications state after optimistic mark all:', updated.map(n => ({id: n.id, read: n.read})));
         return updated;
       });
     } else {
-      console.error('useNotifications: Error marking all as read in DB:', error); // Debug log
+      console.error('useNotifications: Error marking all as read in DB:', error);
     }
     return { error }
   }
