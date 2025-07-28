@@ -14,8 +14,8 @@ type Client = Database['public']['Tables']['clients']['Row'] // New type for cli
 // Extend the Move type to include related quotes, company, and client data
 type MoveWithDetails = Database['public']['Tables']['moves']['Row'] & {
   quotes: Quote[]
-  company: Company
-  client: Pick<Client, 'name'> // Only need the name for the invoice
+  company: Company | null // Allow company to be null
+  client: Pick<Client, 'name'> | null // Allow client to be null
 }
 
 export function Move() {
