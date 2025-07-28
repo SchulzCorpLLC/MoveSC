@@ -15,7 +15,7 @@ export function ProgressBar({ currentStatus }: ProgressBarProps) {
 
   return (
     <div className="w-full">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-start justify-between mb-4">
         {steps.map((step, index) => (
           <div key={step.key} className="flex flex-col items-center flex-1">
             <div className="flex items-center w-full">
