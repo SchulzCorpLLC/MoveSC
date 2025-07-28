@@ -2,7 +2,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { Home, Bell, FileText, User, LogOut } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useClient } from '../hooks/useClient'
-import { useNotifications } from '../hooks/useNotifications' // Import the new hook
+import { useNotifications } from '../context/NotificationContext' // Import from context
 
 export function Layout() {
   const location = useLocation()
