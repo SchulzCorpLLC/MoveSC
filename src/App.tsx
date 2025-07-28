@@ -11,6 +11,7 @@ import { Documents } from './pages/Documents'
 import { Notifications } from './pages/Notifications'
 import { Feedback } from './pages/Feedback'
 import { Profile } from './pages/Profile'
+import { NotificationProvider } from './context/NotificationContext' // Import NotificationProvider
 
 function App() {
   return (
@@ -21,7 +22,9 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/" element={
             <ProtectedRoute>
-              <Layout />
+              <NotificationProvider> {/* Wrap with NotificationProvider */}
+                <Layout />
+              </NotificationProvider>
             </ProtectedRoute>
           }>
             <Route index element={<Navigate to="/dashboard" replace />} />
