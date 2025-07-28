@@ -10,6 +10,8 @@ export function Layout() {
   const { client } = useClient()
   const { unreadCount } = useNotifications() // Use the new hook to get unreadCount
 
+  console.log('Layout.tsx: Rendering Layout component. Unread count:', unreadCount); // Debug log
+
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Notifications', href: '/notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null }, // Add badge property
