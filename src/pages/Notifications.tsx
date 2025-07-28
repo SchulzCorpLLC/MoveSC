@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, Check, CheckCheck } from 'lucide-react'
+import { Bell, CheckCheck } from 'lucide-react'
 import { supabase, type Database } from '../lib/supabase'
 import { useClient } from '../hooks/useClient'
 import toast from 'react-hot-toast'
@@ -46,6 +46,7 @@ export function Notifications() {
           notif.id === notificationId ? { ...notif, read: true } : notif
         )
       )
+      toast.success('Notification marked as read')
     }
   }
 
@@ -106,8 +107,9 @@ export function Notifications() {
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                className={`p-6 hover:bg-gray-50 transition-colors ${
-                  !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''
+                onClick={() => !notification.read && markAsRead(notification.id)} // Make entire div clickable
+                className={`p-6 transition-colors cursor-pointer ${
+                  !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-600 hover:bg-blue-100' : 'hover:bg-gray-50'
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -138,16 +140,7 @@ export function Notifications() {
                       })}
                     </p>
                   </div>
-                  
-                  {!notification.read && (
-                    <button
-                      onClick={() => markAsRead(notification.id)}
-                      className="ml-4 p-2 text-gray-400 hover:text-blue-600 transition-colors"
-                      title="Mark as read"
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                  )}
+                  {/* Removed the explicit "Mark as read" button here */}
                 </div>
               </div>
             ))}
