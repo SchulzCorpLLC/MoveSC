@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Calendar, Clock, Users, Download } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Clock, Users, Download, Eye } from 'lucide-react' // Added Eye icon
 import { supabase, type Database } from '../lib/supabase'
 import { StatusBadge } from '../components/StatusBadge'
 import toast from 'react-hot-toast'
-import html2canvas from 'html2canvas' // New import
-import { jsPDF } from 'jspdf' // New import
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 
 type Quote = Database['public']['Tables']['quotes']['Row']
 type Company = Database['public']['Tables']['companies']['Row']
-type Client = Database['public']['Tables']['clients']['Row'] // New type for client
+type Client = Database['public']['Tables']['clients']['Row']
 
 // Extend the Move type to include related quotes, company, and client data
 type MoveWithDetails = Database['public']['Tables']['moves']['Row'] & {
@@ -28,14 +28,13 @@ export function Move() {
     if (!id) return
 
     const fetchMove = async () => {
-      // Fetch move details, including associated quotes, company, and client name
       const { data, error } = await supabase
         .from('moves')
         .select(`
           *,
           quotes(*),
           company:companies(*),
-          client:clients(name) // Fetch client name
+          client:clients(name)
         `)
         .eq('id', id)
         .single()
@@ -53,17 +52,18 @@ export function Move() {
     fetchMove()
   }, [id, navigate])
 
-  const handleDownloadInvoice = async () => { // Made async
+  // Helper function to generate the PDF instance
+  const generateInvoicePdf = async () => {
     if (!move) {
       toast.error('Move details not loaded.')
-      return
+      return null
     }
 
     const approvedQuote = move.quotes.find(q => q.approved) || move.quotes[0]
 
     if (!approvedQuote) {
       toast.error('No approved quote found for this move.')
-      return
+      return null
     }
 
     const companyName = move.company?.name || 'Moving Company'
@@ -143,25 +143,24 @@ export function Move() {
       </div>
     `
 
-    // Create a temporary div to render the HTML for html2canvas
     const tempDiv = document.createElement('div');
     tempDiv.style.position = 'absolute';
-    tempDiv.style.left = '-9999px'; // Hide it off-screen
-    tempDiv.style.width = '800px'; // Set a fixed width for consistent rendering
+    tempDiv.style.left = '-9999px';
+    tempDiv.style.width = '800px';
     document.body.appendChild(tempDiv);
     tempDiv.innerHTML = invoiceHtml;
 
     try {
       const canvas = await html2canvas(tempDiv, {
-        scale: 2, // Increase scale for better quality
-        useCORS: true, // Important if images are from external sources (like company logo)
-        logging: false, // Disable logging for cleaner console
+        scale: 2,
+        useCORS: true,
+        logging: false,
       });
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
+      const imgWidth = 210;
+      const pageHeight = 297;
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
       let heightLeft = imgHeight;
       let position = 0;
@@ -175,15 +174,29 @@ export function Move() {
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
       }
-
-      pdf.save(`invoice-${move.id.substring(0, 8)}.pdf`);
-      toast.success('Invoice downloaded successfully!');
-
+      return pdf;
     } catch (error) {
       console.error('Error generating PDF:', error);
       toast.error('Failed to generate invoice PDF.');
+      return null;
     } finally {
-      document.body.removeChild(tempDiv); // Clean up the temporary div
+      document.body.removeChild(tempDiv);
+    }
+  }
+
+  const handleDownloadInvoice = async () => {
+    const pdf = await generateInvoicePdf();
+    if (pdf) {
+      pdf.save(`invoice-${move?.id.substring(0, 8)}.pdf`);
+      toast.success('Invoice downloaded successfully!');
+    }
+  }
+
+  const handleViewInvoice = async () => {
+    const pdf = await generateInvoicePdf();
+    if (pdf) {
+      pdf.output('dataurlnewwindow');
+      toast.success('Invoice opened in new tab!');
     }
   }
 
@@ -309,6 +322,13 @@ export function Move() {
           >
             <Download className="h-4 w-4 mr-2" />
             Download Invoice
+          </button>
+          <button
+            onClick={handleViewInvoice}
+            className="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            View Invoice
           </button>
 
           {move.status === 'completed' && (
