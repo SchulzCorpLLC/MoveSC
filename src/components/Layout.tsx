@@ -2,15 +2,17 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { Home, Bell, FileText, User, LogOut } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useClient } from '../hooks/useClient'
+import { useNotifications } from '../hooks/useNotifications' // Import the new hook
 
 export function Layout() {
   const location = useLocation()
   const { signOut } = useAuth()
   const { client } = useClient()
+  const { unreadCount } = useNotifications() // Use the new hook to get unreadCount
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Notifications', href: '/notifications', icon: Bell },
+    { name: 'Notifications', href: '/notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null }, // Add badge property
     { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Profile', href: '/profile', icon: User },
   ]
@@ -61,7 +63,7 @@ export function Layout() {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex flex-col items-center py-3 px-2 text-xs transition-colors ${
+                className={`relative flex flex-col items-center py-3 px-2 text-xs transition-colors ${
                   isActive(item.href)
                     ? 'text-blue-600 bg-blue-50'
                     : 'text-gray-500 hover:text-gray-700'
@@ -69,6 +71,11 @@ export function Layout() {
               >
                 <Icon className="h-5 w-5 mb-1" />
                 <span className="font-medium">{item.name}</span>
+                {item.badge && ( // Conditionally render the badge
+                  <span className="absolute top-1 right-4 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             )
           })}
