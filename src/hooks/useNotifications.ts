@@ -4,6 +4,8 @@ import { useClient } from './useClient'
 
 type Notification = Database['public']['Tables']['notifications']['Row']
 
+// This hook will now be used internally by the NotificationProvider
+// It is no longer directly exported for consumption by other components
 export function useNotifications() {
   const { client } = useClient()
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -43,8 +45,7 @@ export function useNotifications() {
 
     fetchNotifications()
 
-    // Temporarily comment out the real-time subscription
-    /*
+    // Re-enable the real-time subscription now that state is shared via context
     const subscription = supabase
       .channel('public:notifications')
       .on(
@@ -66,9 +67,6 @@ export function useNotifications() {
       console.log('useNotifications: Cleaning up subscription.');
       supabase.removeChannel(subscription);
     }
-    */
-    // Return an empty cleanup function if no subscription is active
-    return () => {};
   }, [client])
 
   const markAsRead = async (notificationId: string) => {
