@@ -188,15 +188,19 @@ export function Move() {
     const pdf = await generateInvoicePdf();
     if (pdf) {
       pdf.save(`invoice-${move?.id.substring(0, 8)}.pdf`);
-      toast.success('Invoice downloaded successfully!');
+      toast.success('Invoice downloaded successfully! Check your device\'s downloads folder.');
     }
   }
 
   const handleViewInvoice = async () => {
     const pdf = await generateInvoicePdf();
     if (pdf) {
-      pdf.output('dataurlnewwindow');
-      toast.success('Invoice opened in new tab!');
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
+      toast.success('Invoice opened in a new tab!');
+      // Clean up the object URL after a short delay
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 100);
     }
   }
 
