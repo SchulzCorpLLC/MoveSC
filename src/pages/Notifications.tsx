@@ -1,76 +1,27 @@
-import { useEffect, useState } from 'react'
 import { Bell, CheckCheck } from 'lucide-react'
-import { supabase, type Database } from '../lib/supabase'
-import { useClient } from '../hooks/useClient'
+import { useNotifications } from '../hooks/useNotifications' // Import the new hook
 import toast from 'react-hot-toast'
 
-type Notification = Database['public']['Tables']['notifications']['Row']
-
 export function Notifications() {
-  const { client } = useClient()
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [loading, setLoading] = useState(true)
+  const { notifications, unreadCount, loading, markAsRead, markAllAsRead } = useNotifications() // Use the new hook
 
-  useEffect(() => {
-    if (!client) return
-
-    const fetchNotifications = async () => {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('client_id', client.id)
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error fetching notifications:', error)
-      } else {
-        setNotifications(data)
-      }
-      setLoading(false)
-    }
-
-    fetchNotifications()
-  }, [client])
-
-  const markAsRead = async (notificationId: string) => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('id', notificationId)
-
-    if (error) {
-      toast.error('Failed to mark as read')
-    } else {
-      setNotifications(prev =>
-        prev.map(notif =>
-          notif.id === notificationId ? { ...notif, read: true } : notif
-        )
-      )
+  const handleMarkAsRead = async (notificationId: string) => {
+    const { error } = await markAsRead(notificationId)
+    if (!error) {
       toast.success('Notification marked as read')
-    }
-  }
-
-  const markAllAsRead = async () => {
-    const unreadIds = notifications.filter(n => !n.read).map(n => n.id)
-    
-    if (unreadIds.length === 0) return
-
-    const { error } = await supabase
-      .from('notifications')
-      .update({ read: true })
-      .in('id', unreadIds)
-
-    if (error) {
-      toast.error('Failed to mark all as read')
     } else {
-      setNotifications(prev =>
-        prev.map(notif => ({ ...notif, read: true }))
-      )
-      toast.success('All notifications marked as read')
+      toast.error('Failed to mark as read')
     }
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length
+  const handleMarkAllAsRead = async () => {
+    const { error } = await markAllAsRead()
+    if (!error) {
+      toast.success('All notifications marked as read')
+    } else {
+      toast.error('Failed to mark all as read')
+    }
+  }
 
   if (loading) {
     return (
@@ -92,7 +43,7 @@ export function Notifications() {
         
         {unreadCount > 0 && (
           <button
-            onClick={markAllAsRead}
+            onClick={handleMarkAllAsRead}
             className="flex items-center space-x-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
           >
             <CheckCheck className="h-4 w-4" />
@@ -107,7 +58,7 @@ export function Notifications() {
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                onClick={() => !notification.read && markAsRead(notification.id)} // Make entire div clickable
+                onClick={() => !notification.read && handleMarkAsRead(notification.id)} // Use handleMarkAsRead
                 className={`p-6 transition-colors cursor-pointer ${
                   !notification.read ? 'bg-blue-50 border-l-4 border-l-blue-600 hover:bg-blue-100' : 'hover:bg-gray-50'
                 }`}
@@ -140,7 +91,6 @@ export function Notifications() {
                       })}
                     </p>
                   </div>
-                  {/* Removed the explicit "Mark as read" button here */}
                 </div>
               </div>
             ))}
