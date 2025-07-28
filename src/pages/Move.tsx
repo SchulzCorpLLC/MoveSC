@@ -4,14 +4,18 @@ import { ArrowLeft, MapPin, Calendar, Clock, Users, Download } from 'lucide-reac
 import { supabase, type Database } from '../lib/supabase'
 import { StatusBadge } from '../components/StatusBadge'
 import toast from 'react-hot-toast'
+import html2canvas from 'html2canvas' // New import
+import { jsPDF } from 'jspdf' // New import
 
 type Quote = Database['public']['Tables']['quotes']['Row']
 type Company = Database['public']['Tables']['companies']['Row']
+type Client = Database['public']['Tables']['clients']['Row'] // New type for client
 
-// Extend the Move type to include related quotes and company data
+// Extend the Move type to include related quotes, company, and client data
 type MoveWithDetails = Database['public']['Tables']['moves']['Row'] & {
   quotes: Quote[]
   company: Company
+  client: Pick<Client, 'name'> // Only need the name for the invoice
 }
 
 export function Move() {
@@ -24,13 +28,14 @@ export function Move() {
     if (!id) return
 
     const fetchMove = async () => {
-      // Fetch move details, including associated quotes and company information
+      // Fetch move details, including associated quotes, company, and client name
       const { data, error } = await supabase
         .from('moves')
         .select(`
           *,
           quotes(*),
-          company:companies(*)
+          company:companies(*),
+          client:clients(name) // Fetch client name
         `)
         .eq('id', id)
         .single()
@@ -48,7 +53,7 @@ export function Move() {
     fetchMove()
   }, [id, navigate])
 
-  const handleDownloadInvoice = () => {
+  const handleDownloadInvoice = async () => { // Made async
     if (!move) {
       toast.error('Move details not loaded.')
       return
@@ -72,110 +77,113 @@ export function Move() {
 
     const lineItemsHtml = (approvedQuote.line_items || [])
       .map((item: any) => `
-        <tr class="border-b border-gray-200">
-          <td class="py-2 px-4 text-left">${item.description || item.name}</td>
-          <td class="py-2 px-4 text-right">$${(item.amount || item.price || 0).toFixed(2)}</td>
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 10px; text-align: left;">${item.description || item.name}</td>
+          <td style="padding: 10px; text-align: right;">$${(item.amount || item.price || 0).toFixed(2)}</td>
         </tr>
       `)
       .join('')
 
     const invoiceHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice for Move ${move.id.substring(0, 8)}</title>
-        <style>
-          body { font-family: 'Helvetica Neue', 'Helvetica', Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
-          .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-          .header { text-align: center; margin-bottom: 30px; }
-          .header img { max-height: 60px; margin-bottom: 10px; }
-          .header h1 { font-size: 28px; color: #2c3e50; margin: 0; }
-          .details { display: flex; justify-content: space-between; margin-bottom: 30px; }
-          .details div { width: 48%; }
-          .details p { margin: 5px 0; font-size: 14px; }
-          .details strong { color: #555; }
-          .section-title { font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-          th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
-          th { background-color: #f8f8f8; font-weight: bold; }
-          .totals { text-align: right; }
-          .totals div { display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px; }
-          .totals .total-amount { font-size: 22px; font-weight: bold; color: #2c3e50; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px; }
-          .footer { text-align: center; font-size: 12px; color: #777; margin-top: 40px; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <div class="header">
-            ${companyLogo ? `<img src="${companyLogo}" alt="${companyName} Logo">` : ''}
-            <h1>${companyName}</h1>
-            <p>Invoice for Move: ${move.origin} to ${move.destination}</p>
-            <p>Date: ${moveDate}</p>
+      <div style="font-family: 'Helvetica Neue', 'Helvetica', Arial, sans-serif; padding: 20px; color: #333; max-width: 800px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+        <div style="text-align: center; margin-bottom: 30px;">
+          ${companyLogo ? `<img src="${companyLogo}" alt="${companyName} Logo" style="max-height: 60px; margin-bottom: 10px;">` : ''}
+          <h1 style="font-size: 28px; color: #2c3e50; margin: 0;">${companyName}</h1>
+          <p>Invoice for Move: ${move.origin} to ${move.destination}</p>
+          <p>Date: ${moveDate}</p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+          <div style="width: 48%;">
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Invoice ID:</strong> ${approvedQuote.id.substring(0, 8)}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Move ID:</strong> ${move.id.substring(0, 8)}</p>
           </div>
-
-          <div class="details">
-            <div>
-              <p><strong>Invoice ID:</strong> ${approvedQuote.id.substring(0, 8)}</p>
-              <p><strong>Move ID:</strong> ${move.id.substring(0, 8)}</p>
-            </div>
-            <div>
-              <p><strong>Client:</strong> ${move.client_id}</p> <!-- You might want to fetch client name here -->
-              <p><strong>Status:</strong> ${move.status.replace(/_/g, ' ')}</p>
-            </div>
-          </div>
-
-          <h2 class="section-title">Quote Breakdown</h2>
-          <table>
-            <thead>
-              <tr>
-                <th class="text-left">Description</th>
-                <th class="text-right">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${lineItemsHtml}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <div>
-              <span>Subtotal:</span>
-              <span>$${approvedQuote.subtotal.toFixed(2)}</span>
-            </div>
-            <div>
-              <span>Tax:</span>
-              <span>$${approvedQuote.tax.toFixed(2)}</span>
-            </div>
-            <div class="total-amount">
-              <span>Total:</span>
-              <span>$${approvedQuote.total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          ${approvedQuote.client_notes ? `
-            <h2 class="section-title">Client Notes</h2>
-            <p>${approvedQuote.client_notes}</p>
-          ` : ''}
-
-          <div class="footer">
-            <p>Thank you for your business!</p>
+          <div style="width: 48%;">
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Client:</strong> ${move.client?.name || 'N/A'}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Status:</strong> ${move.status.replace(/_/g, ' ')}</p>
           </div>
         </div>
-      </body>
-      </html>
+
+        <h2 style="font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px;">Quote Breakdown</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+          <thead>
+            <tr>
+              <th style="padding: 10px; text-align: left; background-color: #f8f8f8; font-weight: bold;">Description</th>
+              <th style="padding: 10px; text-align: right; background-color: #f8f8f8; font-weight: bold;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lineItemsHtml}
+          </tbody>
+        </table>
+
+        <div style="text-align: right;">
+          <div style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px;">
+            <span>Subtotal:</span>
+            <span>$${approvedQuote.subtotal.toFixed(2)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px;">
+            <span>Tax:</span>
+            <span>$${approvedQuote.tax.toFixed(2)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; color: #2c3e50; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;">
+            <span>Total:</span>
+            <span>$${approvedQuote.total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        ${approvedQuote.client_notes ? `
+          <h2 style="font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; margin-top: 30px;">Client Notes</h2>
+          <p>${approvedQuote.client_notes}</p>
+        ` : ''}
+
+        <div style="text-align: center; font-size: 12px; color: #777; margin-top: 40px;">
+          <p>Thank you for your business!</p>
+        </div>
+      </div>
     `
 
-    const printWindow = window.open('', '_blank')
-    if (printWindow) {
-      printWindow.document.write(invoiceHtml)
-      printWindow.document.close()
-      printWindow.focus() // Required for IE
-      printWindow.print()
-      setTimeout(() => {
-        printWindow.close()
-      }, 500) // Close after a short delay
-    } else {
-      toast.error('Please allow pop-ups for invoice download.')
+    // Create a temporary div to render the HTML for html2canvas
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.left = '-9999px'; // Hide it off-screen
+    tempDiv.style.width = '800px'; // Set a fixed width for consistent rendering
+    document.body.appendChild(tempDiv);
+    tempDiv.innerHTML = invoiceHtml;
+
+    try {
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2, // Increase scale for better quality
+        useCORS: true, // Important if images are from external sources (like company logo)
+        logging: false, // Disable logging for cleaner console
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(`invoice-${move.id.substring(0, 8)}.pdf`);
+      toast.success('Invoice downloaded successfully!');
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate invoice PDF.');
+    } finally {
+      document.body.removeChild(tempDiv); // Clean up the temporary div
     }
   }
 
