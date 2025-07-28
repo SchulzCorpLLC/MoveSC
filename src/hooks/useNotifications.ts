@@ -11,7 +11,9 @@ export function useNotifications() {
 
   // Derive unreadCount from notifications state using useMemo for optimization
   const unreadCount = useMemo(() => {
-    return notifications.filter(n => !n.read).length
+    const count = notifications.filter(n => !n.read).length;
+    console.log('useNotifications: unreadCount calculated:', count, 'from notifications:', notifications.map(n => ({id: n.id, read: n.read}))); // Debug log
+    return count;
   }, [notifications])
 
   useEffect(() => {
@@ -22,6 +24,7 @@ export function useNotifications() {
     }
 
     const fetchNotifications = async () => {
+      setLoading(true); // Set loading true before fetch
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
@@ -29,12 +32,13 @@ export function useNotifications() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('Error fetching notifications:', error)
+        console.error('useNotifications: Error fetching notifications:', error)
         setNotifications([])
       } else {
+        console.log('useNotifications: Fetched notifications:', data?.map(n => ({id: n.id, read: n.read}))); // Debug log
         setNotifications(data || [])
       }
-      setLoading(false)
+      setLoading(false); // Set loading false after fetch
     }
 
     fetchNotifications()
@@ -51,6 +55,7 @@ export function useNotifications() {
           filter: `client_id=eq.${client.id}`
         },
         (payload) => {
+          console.log('useNotifications: Realtime change detected:', payload); // Debug log
           // When a change occurs, re-fetch all notifications to ensure consistency
           // This handles cases where notifications are added/deleted/updated from outside the app
           fetchNotifications();
@@ -65,6 +70,7 @@ export function useNotifications() {
 
   // Function to mark a single notification as read
   const markAsRead = async (notificationId: string) => {
+    console.log('useNotifications: markAsRead called for ID:', notificationId); // Debug log
     const { error } = await supabase
       .from('notifications')
       .update({ read: true })
@@ -72,11 +78,19 @@ export function useNotifications() {
 
     if (!error) {
       // Optimistically update local state
-      setNotifications(prev =>
-        prev.map(notif =>
-          notif.id === notificationId ? { ...notif, read: true } : notif
-        )
-      )
+      setNotifications(prev => {
+        const updated = prev.map(notif => {
+          if (notif.id === notificationId) {
+            console.log('useNotifications: Optimistically marking as read:', notif.id); // Debug log
+            return { ...notif, read: true };
+          }
+          return notif;
+        });
+        console.log('useNotifications: Notifications state after optimistic update:', updated.map(n => ({id: n.id, read: n.read}))); // Debug log
+        return updated;
+      });
+    } else {
+      console.error('useNotifications: Error marking as read in DB:', error); // Debug log
     }
     return { error }
   }
@@ -84,6 +98,7 @@ export function useNotifications() {
   // Function to mark all notifications as read
   const markAllAsRead = async () => {
     const unreadIds = notifications.filter(n => !n.read).map(n => n.id)
+    console.log('useNotifications: markAllAsRead called for IDs:', unreadIds); // Debug log
     if (unreadIds.length === 0) return { error: null }
 
     const { error } = await supabase
@@ -93,9 +108,13 @@ export function useNotifications() {
 
     if (!error) {
       // Optimistically update local state
-      setNotifications(prev =>
-        prev.map(notif => ({ ...notif, read: true }))
-      )
+      setNotifications(prev => {
+        const updated = prev.map(notif => ({ ...notif, read: true }));
+        console.log('useNotifications: Notifications state after optimistic mark all:', updated.map(n => ({id: n.id, read: n.read}))); // Debug log
+        return updated;
+      });
+    } else {
+      console.error('useNotifications: Error marking all as read in DB:', error); // Debug log
     }
     return { error }
   }
