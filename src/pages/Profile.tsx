@@ -54,7 +54,7 @@ export function Profile() {
     // Update the auth.users metadata
     const { error: authUpdateError } = await supabase.auth.updateUser({
       data: {
-        name: data.name,
+        display_name: data.name, // Changed 'name' to 'display_name'
         phone: data.phone,
       }
     })
