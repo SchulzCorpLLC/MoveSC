@@ -52,7 +52,7 @@ export function Signup() {
       password: data.password,
       options: {
         data: {
-          name: data.name,
+          display_name: data.name, // Changed 'name' to 'display_name'
           phone: data.phone,
         }
       }
