@@ -6,6 +6,7 @@ import { User, Building, Mail, Phone, LogOut } from 'lucide-react'
 import { useClient } from '../hooks/useClient'
 import { useAuth } from '../hooks/useAuth'
 import toast from 'react-hot-toast'
+import { supabase } from '../lib/supabase' // Import supabase
 
 // Example regex for a basic phone number validation (adjust as needed)
 // This regex allows optional leading +, digits, spaces, hyphens, and parentheses.
@@ -41,10 +42,25 @@ export function Profile() {
   const onSubmit = async (data: ProfileForm) => {
     setUpdating(true)
     
-    const { error } = await updateClient(data)
+    // Update the client table
+    const { error: clientUpdateError } = await updateClient(data)
     
-    if (error) {
+    if (clientUpdateError) {
       toast.error('Failed to update profile')
+      setUpdating(false)
+      return
+    }
+
+    // Update the auth.users metadata
+    const { error: authUpdateError } = await supabase.auth.updateUser({
+      data: {
+        name: data.name,
+        phone: data.phone,
+      }
+    })
+
+    if (authUpdateError) {
+      toast.error('Failed to update user authentication data')
     } else {
       toast.success('Profile updated successfully')
     }
