@@ -3,3 +3,127 @@ For all designs I ask you to make, have them be beautiful, not cookie cutter. Ma
 By default, this template supports JSX syntax with Tailwind CSS classes, React hooks, and Lucide React for icons. Do not install other packages for UI themes, icons, etc unless absolutely necessary or I request them.
 
 Use icons from lucide-react for logos.
+🚚 MoveSC — Scalable Client Portal SaaS for Moving Companies
+
+MoveSC is a mobile-first, multi-tenant SaaS client dashboard for moving companies. It enables companies to offer a professional white-labeled portal for their clients to manage move progress, approve quotes, upload documents, track services, and more.
+
+🎯 Goals:
+- Replace clunky PDF/email-based move coordination
+- Offer modern SaaS tools to local/regional moving companies
+- Support multi-company (multi-tenant) model with Stripe billing
+- Be robust, secure, and scale-ready from day one
+
+🛠 Tech Stack:
+- Frontend: React (Vite + Tailwind)
+- Backend: Supabase (Postgres, Auth, RLS, Edge Functions)
+- Stripe for billing
+- Hosting: Vercel or Cloudflare Pages
+# MoveSC – Technical Architecture & Plan
+
+## 1. Roles & Auth
+
+Roles:
+- client
+- admin (company owner)
+- crew (assigned to moves)
+
+Supabase Auth is used. On login/signup:
+- Edge Function `onboard-client` auto-assigns role & company_id
+- JWT claims include `role` + `company_id`
+- RLS filters all table access by these claims
+
+Tables:
+- `clients`, `admins`, `crew`, `companies`
+- `moves`, `quotes`, `notifications`, `documents`, `invoices`
+- `subscriptions` (Stripe)
+- `invites` (pre-authorized signups)
+
+## 2. App Flows
+
+🔐 Auth:
+- Public homepage with clear path to “Request Access” (company) or “Login” (client)
+- Signup/login pages no longer default route
+
+🧠 Role-aware routing:
+- Clients land in `/client`
+- Admins land in `/admin`
+- Crew lands in `/crew`
+
+🧾 Quote Approval:
+- Clients view quote, click approve
+- Updates `quotes.status` and triggers notification
+- Admin sees approved quotes in dashboard
+
+📤 Document Upload:
+- Clients upload ID, COI, etc.
+- Admins can request specific docs
+- Stored in Supabase Storage
+
+🔔 Notifications:
+- System messages shown to users
+- Optional: email via Edge Function + SendGrid
+
+💳 Stripe:
+- Admin signs up → starts Stripe Checkout
+- On `checkout.session.completed`, company is created, admin assigned, subscription recorded
+
+## 3. Edge Functions
+
+- `onboard-client`: handles new users, assigns roles, inserts into `clients` or `admins`
+- `stripe-webhook-handler`: handles billing status
+
+## 4. RLS Examples
+
+Example (clients table):
+```sql
+CREATE POLICY "Client can read own data"
+ON clients FOR SELECT
+USING (auth.uid() = user_id AND company_id = current_setting('request.jwt.claims.company_id', true)::uuid);
+
+
+---
+
+## ✅ 3. Tasks to Assign in Bolt.new (as tickets or blocks)
+
+You can break these into tasks or milestones:
+
+### 🧱 DB & Auth Setup
+- [ ] Finalize normalized schema
+- [ ] Set up RLS for all tables
+- [ ] Test role-based access via PostgREST
+
+### ⚙️ Backend Logic
+- [ ] Build `onboard-client` Edge Function
+- [ ] Build `stripe-webhook-handler`
+- [ ] Set app_metadata JWT on sign-up
+
+### 💻 Frontend
+- [ ] Replace homepage with role-aware gateway
+- [ ] Implement client-side role routing
+- [ ] Build admin dashboard shell
+- [ ] Build quote approval UI (client side)
+- [ ] Hook into Stripe Checkout via button
+
+### 🚀 Deployment
+- [ ] Set up Supabase CLI for Edge Function deployment
+- [ ] Create `.env.local` for Vercel frontend deploy
+
+---
+
+## 🧠 4. Teaching Bolt.new the Architecture
+
+If Bolt.new supports adding **longform notes, context, or shared Notion**, paste the full **Technical Architecture** there.
+
+Also:
+
+- Label roles clearly: “client” = end-customer, “admin” = moving company owner
+- Store Supabase project URL + anon keys in a secure note or secret env section
+
+---
+
+## Bonus Tip 🔐
+
+If Bolt.new has any kind of **workspace memory** or assistant context, say:
+
+> "This project is a multi-tenant SaaS client portal for moving companies. There are three roles: clients, admins, crew. The system is built on Supabase + React and uses RLS with custom JWT claims."
+
