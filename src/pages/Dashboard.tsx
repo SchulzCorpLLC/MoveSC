@@ -313,7 +313,6 @@ export function Move() {
           {move.status === 'in_progress' && (
             <p className="text-gray-600">Your move is currently in progress. Our crew is working on your relocation.</p>
                         })}
-                      </p>
                     </div>
                   </div>
                 ))}
