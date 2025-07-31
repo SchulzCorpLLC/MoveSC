@@ -312,6 +312,18 @@ export function Move() {
           )}
           {move.status === 'in_progress' && (
             <p className="text-gray-600">Your move is currently in progress. Our crew is working on your relocation.</p>
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {currentMove.move_updates.length > 3 && (
+                  <Link to={`/move/${currentMove.id}`} className="text-sm text-blue-600 hover:underline block text-center mt-4">View all updates</Link>
+                )}
+              </div>
+            </div>
+          )}
+
           )}
           {move.status === 'completed' && (
             <p className="text-gray-600">Your move has been completed successfully. Thank you for choosing our service!</p>
