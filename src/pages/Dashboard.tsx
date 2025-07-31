@@ -1,87 +1,212 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { MapPin, Calendar, ArrowRight, Star } from 'lucide-react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { ArrowLeft, MapPin, Calendar, Clock, Users, Download, Eye, MessageSquare } from 'lucide-react'
 import { supabase, type Database } from '../lib/supabase'
-import { useClient } from '../hooks/useClient'
-import { ProgressBar } from '../components/ProgressBar'
 import { StatusBadge } from '../components/StatusBadge'
+import toast from 'react-hot-toast'
+import html2canvas from 'html2canvas'
+import { jsPDF } from 'jspdf'
 
-type Move = Database['public']['Tables']['moves']['Row'] & {
-  quotes: Database['public']['Tables']['quotes']['Row'][]
+type Quote = Database['public']['Tables']['quotes']['Row']
+type Company = Database['public']['Tables']['companies']['Row']
+type Client = Database['public']['Tables']['clients']['Row']
+type MoveUpdate = Database['public']['Tables']['move_updates']['Row']
+
+// Extend the Move type to include related quotes, company, and client data
+type MoveWithDetails = Database['public']['Tables']['moves']['Row'] & {
+  quotes: Quote[]
+  company: Company | null // Allow company to be null
+  client: Pick<Client, 'name'> | null // Allow client to be null
+  move_updates: MoveUpdate[]
 }
 
-export function Dashboard() {
-  const { client } = useClient()
-  const [moves, setMoves] = useState<Move[]>([])
+export function Move() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const [move, setMove] = useState<MoveWithDetails | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!client) return
+    if (!id) return
 
-    const fetchMoves = async () => {
+    const fetchMove = async () => {
       const { data, error } = await supabase
         .from('moves')
         .select(`
           *,
-          quotes(*)
+          quotes(*),
+          company:companies(*),
+          client:clients(name),
+          move_updates(*)
         `)
-        .eq('client_id', client.id)
-        .order('created_at', { ascending: false })
+        .eq('id', id)
+        .order('move_updates(created_at)', { ascending: false })
+        .single()
 
       if (error) {
-        console.error('Error fetching moves:', error)
+        console.error('Error fetching move:', error)
+        toast.error('Move not found')
+        navigate('/dashboard')
       } else {
-        setMoves(data as Move[])
+        setMove(data as MoveWithDetails)
       }
       setLoading(false)
     }
 
-    fetchMoves()
-  }, [client])
+    fetchMove()
+  }, [id, navigate])
 
-  const currentMove = moves[0] // Most recent move
-  const currentQuote = currentMove?.quotes?.[0]
+  // Helper function to generate the PDF instance
+  const generateInvoicePdf = async () => {
+    if (!move) {
+      toast.error('Move details not loaded.')
+      return null
+    }
 
-  const getNextAction = () => {
-    if (!currentMove) return null
-    
-    switch (currentMove.status) {
-      case 'quote_sent':
-        return currentQuote ? {
-          text: 'Review & Approve Quote',
-          href: `/quote/${currentQuote.id}`,
-          color: 'bg-blue-600 hover:bg-blue-700'
-        } : null
-      case 'approved':
-        return {
-          text: 'Quote Approved - Awaiting Schedule',
-          href: `/move/${currentMove.id}`,
-          color: 'bg-green-600 hover:bg-green-700'
-        }
-      case 'scheduled':
-        return {
-          text: 'View Move Details',
-          href: `/move/${currentMove.id}`,
-          color: 'bg-purple-600 hover:bg-purple-700'
-        }
-      case 'in_progress':
-        return {
-          text: 'Move in Progress',
-          href: `/move/${currentMove.id}`,
-          color: 'bg-orange-600 hover:bg-orange-700'
-        }
-      case 'completed':
-        return {
-          text: 'Leave Feedback',
-          href: `/feedback?move=${currentMove.id}`,
-          color: 'bg-yellow-600 hover:bg-yellow-700'
-        }
-      default:
-        return null
+    const approvedQuote = move.quotes.find(q => q.approved) || move.quotes[0]
+
+    if (!approvedQuote) {
+      toast.error('No approved quote found for this move.')
+      return null
+    }
+
+    const companyName = move.company?.name || 'Moving Company'
+    const companyLogo = move.company?.logo_url || ''
+    const moveDate = new Date(move.date).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+
+    const lineItemsHtml = (approvedQuote.line_items || [])
+      .map((item: any) => `
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 10px; text-align: left;">${item.description || item.name}</td>
+          <td style="padding: 10px; text-align: right;">$${(item.amount || item.price || 0).toFixed(2)}</td>
+        </tr>
+      `)
+      .join('')
+
+    const invoiceHtml = `
+      <div style="font-family: 'Helvetica Neue', 'Helvetica', Arial, sans-serif; padding: 20px; color: #333; max-width: 800px; margin: 0 auto; background: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1);">
+        <div style="text-align: center; margin-bottom: 30px;">
+          ${companyLogo ? `<img src="${companyLogo}" alt="${companyName} Logo" style="max-height: 60px; margin-bottom: 10px;">` : ''}
+          <h1 style="font-size: 28px; color: #2c3e50; margin: 0;">${companyName}</h1>
+          <p>Invoice for Move: ${move.origin} to ${move.destination}</p>
+          <p>Date: ${moveDate}</p>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+          <div style="width: 48%;">
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Invoice ID:</strong> ${approvedQuote.id.substring(0, 8)}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Move ID:</strong> ${move.id.substring(0, 8)}</p>
+          </div>
+          <div style="width: 48%;">
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Client:</strong> ${move.client?.name || 'N/A'}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Status:</strong> ${move.status.replace(/_/g, ' ')}</p>
+          </div>
+        </div>
+
+        <h2 style="font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px;">Quote Breakdown</h2>
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
+          <thead>
+            <tr>
+              <th style="padding: 10px; text-align: left; background-color: #f8f8f8; font-weight: bold;">Description</th>
+              <th style="padding: 10px; text-align: right; background-color: #f8f8f8; font-weight: bold;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${lineItemsHtml}
+          </tbody>
+        </table>
+
+        <div style="text-align: right;">
+          <div style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px;">
+            <span>Subtotal:</span>
+            <span>$${approvedQuote.subtotal.toFixed(2)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px;">
+            <span>Tax:</span>
+            <span>$${approvedQuote.tax.toFixed(2)}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; color: #2c3e50; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;">
+            <span>Total:</span>
+            <span>$${approvedQuote.total.toFixed(2)}</span>
+          </div>
+        </div>
+
+        ${approvedQuote.client_notes ? `
+          <h2 style="font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; margin-top: 30px;">Client Notes</h2>
+          <p>${approvedQuote.client_notes}</p>
+        ` : ''}
+
+        <div style="text-align: center; font-size: 12px; color: #777; margin-top: 40px;">
+          <p>Thank you for your business!</p>
+        </div>
+      </div>
+    `
+
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.left = '-9999px';
+    tempDiv.style.width = '800px';
+    document.body.appendChild(tempDiv);
+    tempDiv.innerHTML = invoiceHtml;
+
+    try {
+      const canvas = await html2canvas(tempDiv, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = 210;
+      const pageHeight = 297;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      return pdf;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate invoice PDF.');
+      return null;
+    } finally {
+      document.body.removeChild(tempDiv);
     }
   }
 
-  const nextAction = getNextAction()
+  const handleDownloadInvoice = async () => {
+    const pdf = await generateInvoicePdf();
+    if (pdf) {
+      pdf.save(`invoice-${move?.id.substring(0, 8)}.pdf`);
+      toast.success('Invoice downloaded successfully! Check your device\'s downloads folder.');
+    }
+  }
+
+  const handleViewInvoice = async () => {
+    const pdf = await generateInvoicePdf();
+    if (pdf) {
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
+      toast.success('Invoice opened in a new tab!');
+      // Clean up the object URL after a short delay
+      setTimeout(() => URL.revokeObjectURL(pdfUrl), 100);
+    }
+  }
 
   if (loading) {
     return (
@@ -91,143 +216,151 @@ export function Dashboard() {
     )
   }
 
+  if (!move) {
+    return (
+      <div className="p-4">
+        <div className="text-center">
+          <h1 className="text-xl font-semibold text-gray-900">Move not found</h1>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4 space-y-6">
-      {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Welcome back, {client?.name}
-        </h1>
-        <p className="text-gray-600 mt-1">
-          {client?.company?.name && `Moving with ${client.company.name}`}
-        </p>
+      {/* Header */}
+      <div className="flex items-center space-x-3">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <ArrowLeft className="h-5 w-5 text-gray-600" />
+        </button>
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Move Details</h1>
+          <StatusBadge status={move.status} />
+        </div>
       </div>
 
-      {currentMove ? (
-        <>
-          {/* Move Summary Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-start justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Current Move</h2>
-              <StatusBadge status={currentMove.status} />
+      {/* Move Information */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Job Information</h2>
+        
+        <div className="space-y-4">
+          <div className="flex items-start space-x-3">
+            <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900">Route</p>
+              <p className="text-sm text-gray-600">
+                <span className="block">{move.origin}</span>
+                <span className="text-gray-400 my-1">↓</span>
+                <span className="block">{move.destination}</span>
+              </p>
             </div>
-            
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center text-gray-600">
-                <MapPin className="h-4 w-4 mr-2 text-gray-400" />
-                <span className="text-sm">
-                  {currentMove.origin} → {currentMove.destination}
-                </span>
-              </div>
-              
-              <div className="flex items-center text-gray-600">
-                <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                <span className="text-sm">
-                  {new Date(currentMove.date).toLocaleDateString('en-US', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric'
-                  })}
-                </span>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <ProgressBar currentStatus={currentMove.status} />
           </div>
 
-          {/* Next Action */}
-          {nextAction && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Next Action</h3>
-              <Link
-                to={nextAction.href}
-                className={`inline-flex items-center px-6 py-3 rounded-lg text-white font-medium transition-colors ${nextAction.color}`}
-              >
-                {nextAction.text}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
+          <div className="flex items-center space-x-3">
+            <Calendar className="h-5 w-5 text-gray-400" />
+            <div>
+              <p className="text-sm font-medium text-gray-900">Move Date</p>
+              <p className="text-sm text-gray-600">
+                {new Date(move.date).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
+            </div>
+          </div>
+
+          {move.estimated_duration && (
+            <div className="flex items-center space-x-3">
+              <Clock className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Estimated Duration</p>
+                <p className="text-sm text-gray-600">{move.estimated_duration}</p>
+              </div>
             </div>
           )}
 
-          {/* Quick Actions */}
-          <div className="grid grid-cols-2 gap-4">
-            <Link
-              to="/documents"
-              className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
-            >
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600 mb-1">📄</div>
-                <p className="text-sm font-medium text-gray-900">Documents</p>
-                <p className="text-xs text-gray-500">Upload & view files</p>
-              </div>
-            </Link>
-
-            <Link
-              to="/notifications"
-              className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
-            >
-              <div className="text-center">
-                <div className="text-2xl font-bold text-blue-600 mb-1">🔔</div>
-                <p className="text-sm font-medium text-gray-900">Updates</p>
-                <p className="text-xs text-gray-500">Recent notifications</p>
-              </div>
-            </Link>
-          </div>
-
-          {/* Recent Moves */}
-          {moves.length > 1 && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Moves</h3>
-              <div className="space-y-3">
-                {moves.slice(1, 4).map((move) => (
-                  <Link
-                    key={move.id}
-                    to={`/move/${move.id}`}
-                    className="block p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {move.origin} → {move.destination}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {new Date(move.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <StatusBadge status={move.status} />
-                    </div>
-                  </Link>
-                ))}
+          {move.crew_info && (
+            <div className="flex items-center space-x-3">
+              <Users className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Crew Information</p>
+                <p className="text-sm text-gray-600">{move.crew_info}</p>
               </div>
             </div>
           )}
-        </>
-      ) : (
-        /* No moves yet */
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-          <div className="text-6xl mb-4">📦</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">No moves yet</h2>
-          <p className="text-gray-600 mb-6">
-            Your moving company will create your first move and you'll see it here.
-          </p>
-          <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
-            <Link
-              to="/profile"
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              Complete Profile
-            </Link>
-            <Link
-              to="/documents"
-              className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-            >
-              Upload Documents
-            </Link>
-          </div>
         </div>
-      )}
+      </div>
+
+      {/* Status Information */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Status</h3>
+        
+        <div className="space-y-3">
+          {move.status === 'quote_sent' && (
+            <p className="text-gray-600">Your quote has been sent and is awaiting your approval.</p>
+          )}
+          {move.status === 'approved' && (
+            <p className="text-gray-600">Your quote has been approved. We'll contact you soon to schedule your move.</p>
+          )}
+          {move.status === 'scheduled' && (
+            <p className="text-gray-600">Your move has been scheduled. Please prepare for the scheduled date.</p>
+          )}
+          {move.status === 'in_progress' && (
+            <p className="text-gray-600">Your move is currently in progress. Our crew is working on your relocation.</p>
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {currentMove.move_updates.length > 3 && (
+                  <Link to={`/move/${currentMove.id}`} className="text-sm text-blue-600 hover:underline block text-center mt-4">View all updates</Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          )}
+          {move.status === 'completed' && (
+            <p className="text-gray-600">Your move has been completed successfully. Thank you for choosing our service!</p>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions</h3>
+        
+        <div className="space-y-3">
+          <button
+            onClick={handleDownloadInvoice}
+            className="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download Invoice
+          </button>
+          <button
+            onClick={handleViewInvoice}
+            className="flex items-center justify-center w-full px-4 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Eye className="h-4 w-4 mr-2" />
+            View Invoice
+          </button>
+
+          {move.status === 'completed' && (
+            <button
+              onClick={() => navigate(`/feedback?move=${move.id}`)}
+              className="flex items-center justify-center w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Leave Feedback
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
