@@ -6,26 +6,13 @@ import { useClient } from '../hooks/useClient'
 import { ProgressBar } from '../components/ProgressBar'
 import { StatusBadge } from '../components/StatusBadge'
 
-
-
-
 type Move = Database['public']['Tables']['moves']['Row'] & {
   quotes: Database['public']['Tables']['quotes']['Row'][]
-
-
-
-
-
-
-
-
-
 }
 
 export function Dashboard() {
   const { client } = useClient()
   const [moves, setMoves] = useState<Move[]>([])
-
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -34,21 +21,12 @@ export function Dashboard() {
     const fetchMoves = async () => {
       const { data, error } = await supabase
         .from('moves')
-        .select(`
-          *,
-          quotes(*)
-
-
-
-        `)
+        .select(`*, quotes(*)`)
         .eq('client_id', client.id)
         .order('created_at', { ascending: false })
 
-
       if (error) {
         console.error('Error fetching moves:', error)
-
-
       } else {
         setMoves(data as Move[])
       }
@@ -58,19 +36,21 @@ export function Dashboard() {
     fetchMoves()
   }, [client])
 
-  const currentMove = moves[0] // Most recent move
+  const currentMove = moves[0]
   const currentQuote = currentMove?.quotes?.[0]
 
   const getNextAction = () => {
     if (!currentMove) return null
-    
+
     switch (currentMove.status) {
       case 'quote_sent':
-        return currentQuote ? {
-          text: 'Review & Approve Quote',
-          href: `/quote/${currentQuote.id}`,
-          color: 'bg-blue-600 hover:bg-blue-700'
-        } : null
+        return currentQuote
+          ? {
+              text: 'Review & Approve Quote',
+              href: `/quote/${currentQuote.id}`,
+              color: 'bg-blue-600 hover:bg-blue-700'
+            }
+          : null
       case 'approved':
         return {
           text: 'Quote Approved - Awaiting Schedule',
@@ -97,134 +77,18 @@ export function Dashboard() {
         }
       default:
         return null
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     }
   }
 
   const nextAction = getNextAction()
 
-
-
-
-
-
-
-
-
-
-
   if (loading) {
     return (
-@@ -91,143 +216,151 @@ export function Dashboard() {
+      <div className="p-4">
+        <p className="text-gray-600">Loading your dashboard...</p>
+      </div>
     )
   }
-
-
-
-
-
-
-
-
-
-
 
   return (
     <div className="p-4 space-y-6">
@@ -236,10 +100,6 @@ export function Dashboard() {
         <p className="text-gray-600 mt-1">
           {client?.company?.name && `Moving with ${client.company.name}`}
         </p>
-
-
-
-
       </div>
 
       {currentMove ? (
@@ -250,7 +110,7 @@ export function Dashboard() {
               <h2 className="text-lg font-semibold text-gray-900">Current Move</h2>
               <StatusBadge status={currentMove.status} />
             </div>
-            
+
             <div className="space-y-3 mb-6">
               <div className="flex items-center text-gray-600">
                 <MapPin className="h-4 w-4 mr-2 text-gray-400" />
@@ -258,7 +118,7 @@ export function Dashboard() {
                   {currentMove.origin} → {currentMove.destination}
                 </span>
               </div>
-              
+
               <div className="flex items-center text-gray-600">
                 <Calendar className="h-4 w-4 mr-2 text-gray-400" />
                 <span className="text-sm">
@@ -272,7 +132,6 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Progress Bar */}
             <ProgressBar currentStatus={currentMove.status} />
           </div>
 
@@ -287,7 +146,6 @@ export function Dashboard() {
                 {nextAction.text}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
-
             </div>
           )}
 
@@ -304,7 +162,6 @@ export function Dashboard() {
               </div>
             </Link>
 
-
             <Link
               to="/notifications"
               className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
@@ -316,8 +173,6 @@ export function Dashboard() {
               </div>
             </Link>
           </div>
-
-
 
           {/* Recent Moves */}
           {moves.length > 1 && (
@@ -343,15 +198,11 @@ export function Dashboard() {
                     </div>
                   </Link>
                 ))}
-
-
-
               </div>
             </div>
           )}
         </>
       ) : (
-        /* No moves yet */
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
           <div className="text-6xl mb-4">📦</div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No moves yet</h2>
@@ -368,19 +219,6 @@ export function Dashboard() {
             <Link
               to="/documents"
               className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-
-
-
-
-
-
-
-
-
-
-
-
-
             >
               Upload Documents
             </Link>
