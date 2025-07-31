@@ -311,11 +311,11 @@ export function Move() {
             <p className="text-gray-600">Your move has been scheduled. Please prepare for the scheduled date.</p>
           )}
           {move.status === 'in_progress' && (
-            <p className="text-gray-600">Your move is currently in progress. Our crew is working on your relocation.</p>
-                        })}
-                    </div>
-                  </div>
-                ))}
+  <p className="text-gray-600">
+    Your move is currently in progress. Our crew is working on your relocation.
+  </p>
+)}
+
                 {currentMove.move_updates.length > 3 && (
                   <Link to={`/move/${currentMove.id}`} className="text-sm text-blue-600 hover:underline block text-center mt-4">View all updates</Link>
                 )}
