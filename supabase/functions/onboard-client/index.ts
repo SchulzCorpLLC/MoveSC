@@ -1,26 +1,49 @@
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 
-// This function is now designed to be triggered directly from the client-side
-// after a user successfully signs up. It expects the user object in the request body.
 serve(async (req) => {
   try {
-    // Parse the request body, which now directly contains the user object
+    // CORS handling for OPTIONS request
+    if (req.method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      });
+    }
+
+    // Ensure it's a POST request
+    if (req.method !== 'POST') {
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+        status: 405,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*', // Added CORS header
+        },
+      });
+    }
+
+    // Parse the request body
     const user = await req.json();
 
     if (!user || !user.id || !user.email) {
       return new Response(JSON.stringify({ error: 'Invalid user data provided in request body' }), {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
         status: 400,
       });
     }
 
     // Get environment variables with explicit checks
-    const projectUrl = Deno.env.get('PROJECT_URL');
-    const serviceKey = Deno.env.get('SERVICE_KEY');
+    const projectUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!projectUrl || !serviceKey) {
-      throw new Error('Missing required environment variables PROJECT_URL or SERVICE_KEY.');
+      throw new Error('Missing required Supabase environment variables.');
     }
 
     // Initialize Supabase client with service role key for admin operations
@@ -37,7 +60,7 @@ serve(async (req) => {
       .eq('email', userEmail)
       .single();
 
-    if (inviteError && inviteError.code !== 'PGRST116' && inviteError.status !== 406) { // PGRST116/406 means no rows found
+    if (inviteError && inviteError.code !== 'PGRST116' && inviteError.status !== 406) {
       console.error('Error fetching invite:', inviteError);
       throw new Error('Failed to check invites table.');
     }
@@ -46,7 +69,7 @@ serve(async (req) => {
       assignedRole = invite.role;
       assignedCompanyId = invite.company_id;
 
-      // Optionally: Delete the invite record after it's been used
+      // Delete the invite record after it's been used
       const { error: deleteInviteError } = await supabaseAdmin
         .from('invites')
         .delete()
@@ -54,60 +77,45 @@ serve(async (req) => {
 
       if (deleteInviteError) {
         console.error('Error deleting invite:', deleteInviteError);
-        // Continue even if deletion fails
       }
-    } else {
-      // If no invite found, default to 'client' role without company_id
-      console.log(`No invite found for ${userEmail}. Assigning default 'client' role.`);
     }
 
     // 2. Insert user into the appropriate role-specific table
     const commonUserData = {
       user_id: user.id,
       email: userEmail,
-      name: user.user_metadata?.display_name || userEmail, // Use display_name from auth metadata or fallback
-      phone: user.user_metadata?.phone || null, // Use phone from auth metadata or null
+      name: user.user_metadata?.display_name || userEmail,
+      phone: user.user_metadata?.phone || null,
       company_id: assignedCompanyId,
     };
 
-    if (assignedRole === 'client') {
-      const { error } = await supabaseAdmin.from('clients').insert(commonUserData);
-      if (error) {
-        console.error(`Error inserting into clients table:`, error);
-        throw new Error('Failed to create client record in database.');
-      }
-    } else if (assignedRole === 'admin') {
-      if (!assignedCompanyId) {
-        throw new Error(`Admin user ${userEmail} must have an associated company_id.`);
-      }
-      const { error } = await supabaseAdmin.from('admins').insert({
-        user_id: commonUserData.user_id,
-        email: commonUserData.email,
-        name: commonUserData.name,
-        company_id: assignedCompanyId,
-      });
-      if (error) {
-        console.error(`Error inserting into admins table:`, error);
-        throw new Error('Failed to create admin record in database.');
-      }
-    } else if (assignedRole === 'crew') {
-      if (!assignedCompanyId) {
-        throw new Error(`Crew user ${userEmail} must have an associated company_id.`);
-      }
-      const { error } = await supabaseAdmin.from('crew').insert(commonUserData);
-      if (error) {
-        console.error(`Error inserting into crew table:`, error);
-        throw new Error('Failed to create crew record in database.');
-      }
+    switch (assignedRole) {
+      case 'client':
+        await insertUserInTable(supabaseAdmin, 'clients', commonUserData);
+        break;
+      case 'admin':
+        if (!assignedCompanyId) {
+          throw new Error(`Admin user ${userEmail} must have an associated company_id.`);
+        }
+        await insertUserInTable(supabaseAdmin, 'admins', {
+          ...commonUserData,
+          company_id: assignedCompanyId,
+        });
+        break;
+      case 'crew':
+        if (!assignedCompanyId) {
+          throw new Error(`Crew user ${userEmail} must have an associated company_id.`);
+        }
+        await insertUserInTable(supabaseAdmin, 'crew', commonUserData);
+        break;
     }
 
     // 3. Update the user's app_metadata in Supabase Auth
-    // This metadata will be included in the user's JWT for RLS and frontend routing.
     const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
       user.id,
       {
         app_metadata: {
-          ...user.app_metadata, // Preserve existing app_metadata
+          ...user.app_metadata,
           role: assignedRole,
           company_id: assignedCompanyId,
         },
@@ -119,18 +127,37 @@ serve(async (req) => {
       throw new Error('Failed to set user metadata in Supabase Auth.');
     }
 
-    console.log(`Successfully onboarded user ${userEmail} as ${assignedRole} for company ${assignedCompanyId || 'N/A'}.`);
-
-    return new Response(JSON.stringify({ success: true, role: assignedRole, company_id: assignedCompanyId }), {
-      headers: { 'Content-Type': 'application/json' },
+    return new Response(JSON.stringify({ 
+      success: true, 
+      role: assignedRole, 
+      company_id: assignedCompanyId 
+    }), {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       status: 200,
     });
 
   } catch (error: any) {
-    console.error('Edge Function execution error:', error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { 'Content-Type': 'application/json' },
+    console.error('Edge Function execution error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message || 'Unknown error occurred' 
+    }), {
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
       status: 500,
     });
   }
 });
+
+// Helper function to insert user into a specific table
+async function insertUserInTable(supabaseAdmin: any, tableName: string, userData: any) {
+  const { error } = await supabaseAdmin.from(tableName).insert(userData);
+  if (error) {
+    console.error(`Error inserting into ${tableName} table:`, error);
+    throw new Error(`Failed to create ${tableName} record in database.`);
+  }
+}
