@@ -11,9 +11,10 @@ import { Documents } from './pages/Documents'
 import { Notifications } from './pages/Notifications'
 import { Feedback } from './pages/Feedback'
 import { Profile } from './pages/Profile'
-import { ForgotPassword } from './pages/ForgotPassword' // Import new component
-import { ResetPassword } from './pages/ResetPassword' // Import new component
-import { NotificationProvider } from './context/NotificationContext' // Import NotificationProvider
+import { ForgotPassword } from './pages/ForgotPassword'
+import { ResetPassword } from './pages/ResetPassword'
+import { Services } from './pages/Services' // Import new component
+import { NotificationProvider } from './context/NotificationContext'
 
 function App() {
   return (
@@ -22,11 +23,11 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} /> {/* New route */}
-          <Route path="/reset-password" element={<ResetPassword />} /> {/* New route */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/" element={
             <ProtectedRoute>
-              <NotificationProvider> {/* Wrap with NotificationProvider */}
+              <NotificationProvider>
                 <Layout />
               </NotificationProvider>
             </ProtectedRoute>
@@ -39,6 +40,7 @@ function App() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="feedback" element={<Feedback />} />
             <Route path="profile" element={<Profile />} />
+            <Route path="services" element={<Services />} /> {/* New route */}
           </Route>
         </Routes>
         <Toaster 
