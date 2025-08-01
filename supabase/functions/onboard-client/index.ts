@@ -20,7 +20,7 @@ serve(async (req) => {
         status: 405,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*', // Added CORS header
+          'Access-Control-Allow-Origin': '*',
         },
       });
     }
@@ -29,13 +29,16 @@ serve(async (req) => {
     const user = await req.json();
 
     if (!user || !user.id || !user.email) {
-      return new Response(JSON.stringify({ error: 'Invalid user data provided in request body' }), {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-        status: 400,
-      });
+      return new Response(
+        JSON.stringify({ error: 'Invalid user data provided in request body' }),
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+          status: 400,
+        }
+      );
     }
 
     // Get environment variables with explicit checks
@@ -60,7 +63,15 @@ serve(async (req) => {
       .eq('email', userEmail)
       .single();
 
-    if (inviteError && inviteError.code !== 'PGRST116' && inviteError.status !== 406) {
+    // Improved error handling for "no rows found"
+    if (
+      inviteError &&
+      !(
+        inviteError.code?.startsWith('PGRST') ||
+        inviteError.status === 404 ||
+        inviteError.status === 406
+      )
+    ) {
       console.error('Error fetching invite:', inviteError);
       throw new Error('Failed to check invites table.');
     }
@@ -78,6 +89,9 @@ serve(async (req) => {
       if (deleteInviteError) {
         console.error('Error deleting invite:', deleteInviteError);
       }
+    } else {
+      // No invite found: log it for debugging if needed
+      console.log(`No invite found for email: ${userEmail}, assigning default 'client' role.`);
     }
 
     // 2. Insert user into the appropriate role-specific table
@@ -127,34 +141,43 @@ serve(async (req) => {
       throw new Error('Failed to set user metadata in Supabase Auth.');
     }
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      role: assignedRole, 
-      company_id: assignedCompanyId 
-    }), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      status: 200,
-    });
-
+    return new Response(
+      JSON.stringify({
+        success: true,
+        role: assignedRole,
+        company_id: assignedCompanyId,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        status: 200,
+      }
+    );
   } catch (error: any) {
     console.error('Edge Function execution error:', error);
-    return new Response(JSON.stringify({ 
-      error: error.message || 'Unknown error occurred' 
-    }), {
-      headers: { 
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
-      status: 500,
-    });
+    return new Response(
+      JSON.stringify({
+        error: error.message || 'Unknown error occurred',
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        },
+        status: 500,
+      }
+    );
   }
 });
 
 // Helper function to insert user into a specific table
-async function insertUserInTable(supabaseAdmin: any, tableName: string, userData: any) {
+async function insertUserInTable(
+  supabaseAdmin: any,
+  tableName: string,
+  userData: any
+) {
   const { error } = await supabaseAdmin.from(tableName).insert(userData);
   if (error) {
     console.error(`Error inserting into ${tableName} table:`, error);
