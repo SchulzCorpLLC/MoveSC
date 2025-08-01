@@ -13,7 +13,8 @@ import { Feedback } from './pages/Feedback'
 import { Profile } from './pages/Profile'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
-import { Services } from './pages/Services' // Import new component
+import { Services } from './pages/Services'
+import { ActivityLog } from './pages/ActivityLog' // Import new component
 import { NotificationProvider } from './context/NotificationContext'
 
 function App() {
@@ -40,7 +41,8 @@ function App() {
             <Route path="notifications" element={<Notifications />} />
             <Route path="feedback" element={<Feedback />} />
             <Route path="profile" element={<Profile />} />
-            <Route path="services" element={<Services />} /> {/* New route */}
+            <Route path="services" element={<Services />} />
+            <Route path="activity-log" element={<ActivityLog />} /> {/* New route */}
           </Route>
         </Routes>
         <Toaster 
