@@ -16,13 +16,16 @@ serve(async (req) => {
 
     // Ensure it's a POST request
     if (req.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-        status: 405,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
+      return new Response(
+        JSON.stringify({ error: 'Method not allowed' }),
+        {
+          status: 405,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
     }
 
     // Parse the request body
@@ -178,8 +181,11 @@ async function insertUserInTable(
   tableName: string,
   userData: any
 ) {
-  const { error } = await supabaseAdmin.from(tableName).insert(userData);
-  if (error) {
+  const { data, error } = await supabaseAdmin.from(tableName).insert(userData);
+  console.log(`Insert into ${tableName} response:`, { data, error });
+
+  // Only throw if error exists and no data was inserted
+  if (error && !data) {
     console.error(`Error inserting into ${tableName} table:`, error);
     throw new Error(`Failed to create ${tableName} record in database.`);
   }
