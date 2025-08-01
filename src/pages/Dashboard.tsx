@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Calendar, ArrowRight, Star } from 'lucide-react'
+import { MapPin, Calendar, ArrowRight, MessageSquare } from 'lucide-react'
 import { supabase, type Database } from '../lib/supabase'
 import { useClient } from '../hooks/useClient'
 import { ProgressBar } from '../components/ProgressBar'
@@ -8,6 +8,7 @@ import { StatusBadge } from '../components/StatusBadge'
 
 type Move = Database['public']['Tables']['moves']['Row'] & {
   quotes: Database['public']['Tables']['quotes']['Row'][]
+  move_updates: Database['public']['Tables']['move_updates']['Row'][]
 }
 
 export function Dashboard() {
@@ -21,14 +22,23 @@ export function Dashboard() {
     const fetchMoves = async () => {
       const { data, error } = await supabase
         .from('moves')
-        .select(`*, quotes(*)`)
+        .select(`
+          *,
+          move_updates(*),
+          quotes(*)
+        `)
         .eq('client_id', client.id)
         .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error fetching moves:', error)
       } else {
-        setMoves(data as Move[])
+        // Sort move_updates by created_at in descending order for each move
+        const sortedMoves = data.map(move => ({
+          ...move,
+          move_updates: move.move_updates.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        }))
+        setMoves(sortedMoves as Move[])
       }
       setLoading(false)
     }
@@ -146,6 +156,38 @@ export function Dashboard() {
                 {nextAction.text}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
+            </div>
+          )}
+
+          {/* Recent Updates */}
+          {currentMove.move_updates && currentMove.move_updates.length > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Updates</h3>
+              <div className="space-y-3">
+                {currentMove.move_updates.slice(0, 3).map((update) => (
+                  <div key={update.id} className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
+                    <MessageSquare className="h-5 w-5 text-blue-600 flex-shrink-0 mt-1" />
+                    <div>
+                      <p className="font-medium text-gray-900">{update.title}</p>
+                      {update.description && (
+                        <p className="text-sm text-gray-600 mt-1">{update.description}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(update.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {currentMove.move_updates.length > 3 && (
+                  <Link to={`/move/${currentMove.id}`} className="text-sm text-blue-600 hover:underline block text-center mt-4">View all updates</Link>
+                )}
+              </div>
             </div>
           )}
 
