@@ -1,19 +1,20 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Home, Bell, FileText, User, LogOut } from 'lucide-react'
+import { Home, Bell, FileText, User, LogOut, Package } from 'lucide-react' // Import Package icon
 import { useAuth } from '../hooks/useAuth'
 import { useClient } from '../hooks/useClient'
-import { useNotifications } from '../context/NotificationContext' // Import from context
+import { useNotifications } from '../context/NotificationContext'
 
 export function Layout() {
   const location = useLocation()
   const { signOut } = useAuth()
   const { client } = useClient()
-  const { unreadCount } = useNotifications() // Use the new hook to get unreadCount
+  const { unreadCount } = useNotifications()
 
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Notifications', href: '/notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null }, // Add badge property
+    { name: 'Notifications', href: '/notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
     { name: 'Documents', href: '/documents', icon: FileText },
+    { name: 'Services', href: '/services', icon: Package }, // New navigation item
     { name: 'Profile', href: '/profile', icon: User },
   ]
 
@@ -56,7 +57,7 @@ export function Layout() {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-5"> {/* Changed to grid-cols-5 to accommodate new item */}
           {navigation.map((item) => {
             const Icon = item.icon
             return (
@@ -71,7 +72,7 @@ export function Layout() {
               >
                 <Icon className="h-5 w-5 mb-1" />
                 <span className="font-medium">{item.name}</span>
-                {item.badge && ( // Conditionally render the badge
+                {item.badge && (
                   <span className="absolute top-1 right-4 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 flex items-center justify-center">
                     {item.badge}
                   </span>
