@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Home, Bell, FileText, User, LogOut, Package, History } from 'lucide-react' // Import History icon
+import { Home, Bell, FileText, User, LogOut, Package, History, ClipboardList } from 'lucide-react' // Import ClipboardList icon
 import { useAuth } from '../hooks/useAuth'
 import { useClient } from '../hooks/useClient'
 import { useNotifications } from '../context/NotificationContext'
@@ -15,7 +15,8 @@ export function Layout() {
     { name: 'Notifications', href: '/notifications', icon: Bell, badge: unreadCount > 0 ? unreadCount : null },
     { name: 'Documents', href: '/documents', icon: FileText },
     { name: 'Services', href: '/services', icon: Package },
-    { name: 'Activity', href: '/activity-log', icon: History }, // New navigation item
+    { name: 'Activity', href: '/activity-log', icon: History },
+    { name: 'Quotes', href: '/quotes', icon: ClipboardList }, // New navigation item
     { name: 'Profile', href: '/profile', icon: User },
   ]
 
@@ -58,7 +59,7 @@ export function Layout() {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200">
-        <div className="grid grid-cols-6"> {/* Changed to grid-cols-6 to accommodate new item */}
+        <div className="grid grid-cols-7"> {/* Changed to grid-cols-7 to accommodate new item */}
           {navigation.map((item) => {
             const Icon = item.icon
             return (
