@@ -9,7 +9,7 @@ import { Quote } from './pages/Quote'
 import { Move } from './pages/Move'
 import { Documents } from './pages/Documents'
 import { Notifications } from './pages/Notifications'
-import { Feedback } from './pages/Feedback'
+import { Feedback } from './pages/Feedback' // Import new component
 import { Profile } from './pages/Profile'
 import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
@@ -17,7 +17,7 @@ import { Services } from './pages/Services'
 import { ActivityLog } from './pages/ActivityLog'
 import { QuotesList } from './pages/QuotesList'
 import { RequestQuote } from './pages/RequestQuote'
-import { MovesList } from './pages/MovesList' // Import new component
+import { MovesList } from './pages/MovesList'
 import { NotificationProvider } from './context/NotificationContext'
 
 function App() {
@@ -42,13 +42,13 @@ function App() {
             <Route path="move/:id" element={<Move />} />
             <Route path="documents" element={<Documents />} />
             <Route path="notifications" element={<Notifications />} />
-            <Route path="feedback" element={<Feedback />} />
+            <Route path="feedback" element={<Feedback />} /> {/* New route */}
             <Route path="profile" element={<Profile />} />
             <Route path="services" element={<Services />} />
             <Route path="activity-log" element={<ActivityLog />} />
             <Route path="quotes" element={<QuotesList />} />
             <Route path="request-quote" element={<RequestQuote />} />
-            <Route path="moves" element={<MovesList />} /> {/* New route */}
+            <Route path="moves" element={<MovesList />} />
           </Route>
         </Routes>
         <Toaster 
