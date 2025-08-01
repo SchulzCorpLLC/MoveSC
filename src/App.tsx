@@ -15,7 +15,7 @@ import { ForgotPassword } from './pages/ForgotPassword'
 import { ResetPassword } from './pages/ResetPassword'
 import { Services } from './pages/Services'
 import { ActivityLog } from './pages/ActivityLog'
-import { QuotesList } from './pages/QuotesList' // Import new component
+import { QuotesList } from './pages/QuotesList'
 import { NotificationProvider } from './context/NotificationContext'
 
 function App() {
@@ -44,7 +44,7 @@ function App() {
             <Route path="profile" element={<Profile />} />
             <Route path="services" element={<Services />} />
             <Route path="activity-log" element={<ActivityLog />} />
-            <Route path="quotes" element={<QuotesList />} /> {/* New route */}
+            <Route path="quotes" element={<QuotesList />} />
           </Route>
         </Routes>
         <Toaster 
@@ -62,4 +62,4 @@ function App() {
   )
 }
 
-export default App```
+export default App
