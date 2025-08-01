@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { User, Building, Mail, Phone, LogOut } from 'lucide-react'
+import { User, Building, Mail, Phone, LogOut, KeyRound } from 'lucide-react' // Added KeyRound icon
 import { useClient } from '../hooks/useClient'
 import { useAuth } from '../hooks/useAuth'
 import toast from 'react-hot-toast'
@@ -22,15 +22,27 @@ const profileSchema = z.object({
 
 type ProfileForm = z.infer<typeof profileSchema>
 
+const passwordChangeSchema = z.object({
+  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
+  confirmNewPassword: z.string(),
+}).refine((data) => data.newPassword === data.confirmNewPassword, {
+  message: "Passwords don't match",
+  path: ["confirmNewPassword"],
+});
+
+type PasswordChangeForm = z.infer<typeof passwordChangeSchema>
+
 export function Profile() {
   const { user, signOut } = useAuth()
   const { client, updateClient } = useClient()
-  const [updating, setUpdating] = useState(false)
+  const [updatingProfile, setUpdatingProfile] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
 
   const {
-    register,
-    handleSubmit,
-    formState: { errors },
+    register: registerProfile,
+    handleSubmit: handleSubmitProfile,
+    formState: { errors: profileErrors },
+    reset: resetProfileForm,
   } = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
@@ -39,15 +51,35 @@ export function Profile() {
     }
   })
 
-  const onSubmit = async (data: ProfileForm) => {
-    setUpdating(true)
+  const {
+    register: registerPassword,
+    handleSubmit: handleSubmitPassword,
+    formState: { errors: passwordErrors },
+    reset: resetPasswordForm,
+  } = useForm<PasswordChangeForm>({
+    resolver: zodResolver(passwordChangeSchema),
+  })
+
+  // Update default values when client data loads
+  useState(() => {
+    if (client) {
+      resetProfileForm({
+        name: client.name || '',
+        phone: client.phone || '',
+      });
+    }
+  }, [client, resetProfileForm]);
+
+
+  const onSubmitProfile = async (data: ProfileForm) => {
+    setUpdatingProfile(true)
     
     // Update the client table
     const { error: clientUpdateError } = await updateClient(data)
     
     if (clientUpdateError) {
       toast.error('Failed to update profile')
-      setUpdating(false)
+      setUpdatingProfile(false)
       return
     }
 
@@ -65,7 +97,24 @@ export function Profile() {
       toast.success('Profile updated successfully')
     }
     
-    setUpdating(false)
+    setUpdatingProfile(false)
+  }
+
+  const onSubmitPassword = async (data: PasswordChangeForm) => {
+    setChangingPassword(true)
+
+    const { error } = await supabase.auth.updateUser({
+      password: data.newPassword,
+    })
+
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success('Password updated successfully!')
+      resetPasswordForm(); // Clear form fields on success
+    }
+
+    setChangingPassword(false)
   }
 
   const handleSignOut = async () => {
@@ -81,7 +130,7 @@ export function Profile() {
       </div>
 
       {/* Profile Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <form onSubmit={handleSubmitProfile(onSubmitProfile)} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h2>
         
         <div className="space-y-4">
@@ -91,13 +140,13 @@ export function Profile() {
               Full Name
             </label>
             <input
-              {...register('name')}
+              {...registerProfile('name')}
               type="text"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter your full name"
             />
-            {errors.name && (
-              <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+            {profileErrors.name && (
+              <p className="mt-1 text-sm text-red-600">{profileErrors.name.message}</p>
             )}
           </div>
 
@@ -121,22 +170,69 @@ export function Profile() {
               Phone Number
             </label>
             <input
-              {...register('phone')}
+              {...registerProfile('phone')}
               type="tel"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Enter your phone number"
             />
-            {errors.phone && (
-              <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
+            {profileErrors.phone && (
+              <p className="mt-1 text-sm text-red-600">{profileErrors.phone.message}</p>
             )}
           </div>
 
           <button
             type="submit"
-            disabled={updating}
+            disabled={updatingProfile}
             className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {updating ? 'Updating...' : 'Save Changes'}
+            {updatingProfile ? 'Updating...' : 'Save Changes'}
+          </button>
+        </div>
+      </form>
+
+      {/* Change Password Form */}
+      <form onSubmit={handleSubmitPassword(onSubmitPassword)} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="newPassword" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <KeyRound className="h-4 w-4 mr-2" />
+              New Password
+            </label>
+            <input
+              {...registerPassword('newPassword')}
+              type="password"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter new password"
+            />
+            {passwordErrors.newPassword && (
+              <p className="mt-1 text-sm text-red-600">{passwordErrors.newPassword.message}</p>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="confirmNewPassword" className="flex items-center text-sm font-medium text-gray-700 mb-2">
+              <KeyRound className="h-4 w-4 mr-2" />
+              Confirm New Password
+            </label>
+            <input
+              {...registerPassword('confirmNewPassword')}
+              type="password"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Confirm new password"
+            />
+            {passwordErrors.confirmNewPassword && (
+              <p className="mt-1 text-sm text-red-600">{passwordErrors.confirmNewPassword.message}</p>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={changingPassword}
+            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {changingPassword ? 'Changing...' : 'Change Password'}
           </button>
         </div>
       </form>
