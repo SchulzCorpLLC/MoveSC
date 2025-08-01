@@ -47,21 +47,55 @@ export function Signup() {
   const onSubmit = async (data: SignupForm) => {
     setIsLoading(true)
     
-    const { error } = await supabase.auth.signUp({
+    const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
       options: {
         data: {
-          display_name: data.name, // Changed 'name' to 'display_name'
+          display_name: data.name,
           phone: data.phone,
         }
       }
     })
 
-    if (error) {
-      toast.error(error.message)
+    if (authError) {
+      toast.error(authError.message)
+      setIsLoading(false)
+      return
+    }
+
+    if (authData.user) {
+      // Call the Edge Function to handle client onboarding
+      try {
+        // IMPORTANT: Replace 'YOUR_EDGE_FUNCTION_URL' with the actual URL of your deployed 'onboard-client' function.
+        // You can find this URL in your Supabase dashboard under Edge Functions -> onboard-client -> URL.
+        const edgeFunctionUrl = 'https://ceginrzsnnqyhemdektq.supabase.co/functions/v1/onboard-client'; 
+        
+        const response = await fetch(edgeFunctionUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(authData.user), // Send the user object directly
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error('Edge Function error:', result.error);
+          toast.error(`Account created, but onboarding failed: ${result.error || 'Unknown error'}`);
+          // Optionally, you might want to delete the user here if onboarding is critical
+          // await supabase.auth.admin.deleteUser(authData.user.id);
+        } else {
+          toast.success('Account created and onboarded successfully!');
+        }
+      } catch (edgeFunctionError: any) {
+        console.error('Error calling Edge Function:', edgeFunctionError);
+        toast.error(`Account created, but onboarding failed due to network error: ${edgeFunctionError.message}`);
+      }
     } else {
-      toast.success('Account created successfully!')
+      // This case might happen if signup is successful but no user object is returned (e.g., email confirmation needed)
+      toast.success('Account created! Please check your email for a confirmation link.');
     }
     
     setIsLoading(false)
@@ -119,7 +153,7 @@ export function Signup() {
               <input
                 {...register('phone')}
                 type="tel"
-                className="mt-1 appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="mt-1 appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Enter your phone number"
               />
               {errors.phone && (
@@ -134,7 +168,7 @@ export function Signup() {
               <input
                 {...register('password')}
                 type="password"
-                className="mt-1 appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="mt-1 appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Enter your password"
               />
               {errors.password && (
@@ -149,7 +183,7 @@ export function Signup() {
               <input
                 {...register('confirmPassword')}
                 type="password"
-                className="mt-1 appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                className="mt-1 appearance-none rounded-lg relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
                 placeholder="Confirm your password"
               />
               {errors.confirmPassword && (
