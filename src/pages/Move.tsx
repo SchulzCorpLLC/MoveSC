@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Calendar, Clock, Users, Download, Eye } from 'lucide-react' // Added Eye icon
+import { ArrowLeft, MapPin, Calendar, Clock, Users, Download, Eye, FileText, MessageSquare } from 'lucide-react' // Added FileText and MessageSquare
 import { supabase, type Database } from '../lib/supabase'
 import { StatusBadge } from '../components/StatusBadge'
 import toast from 'react-hot-toast'
@@ -10,12 +10,16 @@ import { jsPDF } from 'jspdf'
 type Quote = Database['public']['Tables']['quotes']['Row']
 type Company = Database['public']['Tables']['companies']['Row']
 type Client = Database['public']['Tables']['clients']['Row']
+type Invoice = Database['public']['Tables']['invoices']['Row'] // New type
+type MoveUpdate = Database['public']['Tables']['move_updates']['Row'] // Added for recent updates section
 
-// Extend the Move type to include related quotes, company, and client data
+// Extend the Move type to include related quotes, company, client, invoices, and move_updates data
 type MoveWithDetails = Database['public']['Tables']['moves']['Row'] & {
   quotes: Quote[]
-  company: Company | null // Allow company to be null
-  client: Pick<Client, 'name'> | null // Allow client to be null
+  company: Company | null
+  client: Pick<Client, 'name'> | null
+  invoices: Invoice[] // Add invoices
+  move_updates: MoveUpdate[] // Add move_updates
 }
 
 export function Move() {
@@ -34,7 +38,9 @@ export function Move() {
           *,
           quotes(*),
           company:companies(*),
-          client:clients(name)
+          client:clients(name),
+          invoices(*), // Fetch invoices
+          move_updates(*) // Fetch move_updates
         `)
         .eq('id', id)
         .single()
@@ -44,7 +50,9 @@ export function Move() {
         toast.error('Move not found')
         navigate('/dashboard')
       } else {
-        setMove(data as MoveWithDetails)
+        // Sort move_updates by created_at in descending order
+        const sortedMoveUpdates = data.move_updates.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        setMove({ ...data, move_updates: sortedMoveUpdates } as MoveWithDetails);
       }
       setLoading(false)
     }
@@ -59,10 +67,12 @@ export function Move() {
       return null
     }
 
-    const approvedQuote = move.quotes.find(q => q.approved) || move.quotes[0]
+    // Prioritize using an actual invoice record if available
+    const invoice = move.invoices.length > 0 ? move.invoices[0] : null; // Assuming one invoice per move for simplicity, or pick the latest/relevant one
+    const approvedQuote = move.quotes.find(q => q.approved) || move.quotes[0]; // Still need quote for line items
 
-    if (!approvedQuote) {
-      toast.error('No approved quote found for this move.')
+    if (!invoice && !approvedQuote) {
+      toast.error('No invoice or approved quote found for this move to generate PDF.')
       return null
     }
 
@@ -75,7 +85,20 @@ export function Move() {
       day: 'numeric'
     })
 
-    const lineItemsHtml = (approvedQuote.line_items || [])
+    // Use invoice details if available, otherwise fall back to quote details for display
+    const invoiceIdDisplay = invoice?.invoice_number || invoice?.id?.substring(0, 8) || 'N/A';
+    const issueDateDisplay = invoice?.issue_date ? new Date(invoice.issue_date).toLocaleDateString('en-US') : 'N/A';
+    const dueDateDisplay = invoice?.due_date ? new Date(invoice.due_date).toLocaleDateString('en-US') : 'N/A';
+    const totalAmountDisplay = invoice?.total_amount !== undefined ? invoice.total_amount.toFixed(2) : (approvedQuote?.total !== undefined ? approvedQuote.total.toFixed(2) : '0.00');
+    const statusDisplay = invoice?.status?.replace(/_/g, ' ') || 'N/A';
+
+    // Line items still come from the quote as the invoice table doesn't store them
+    const lineItemsToUse = approvedQuote?.line_items || [];
+    const subtotalToUse = approvedQuote?.subtotal !== undefined ? approvedQuote.subtotal : 0;
+    const taxToUse = approvedQuote?.tax !== undefined ? approvedQuote.tax : 0;
+    const clientNotesToUse = approvedQuote?.client_notes || '';
+
+    const lineItemsHtml = (lineItemsToUse || [])
       .map((item: any) => `
         <tr style="border-bottom: 1px solid #eee;">
           <td style="padding: 10px; text-align: left;">${item.description || item.name}</td>
@@ -95,16 +118,18 @@ export function Move() {
 
         <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
           <div style="width: 48%;">
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Invoice ID:</strong> ${approvedQuote.id.substring(0, 8)}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Invoice ID:</strong> ${invoiceIdDisplay}</p>
             <p style="margin: 5px 0; font-size: 14px;"><strong>Move ID:</strong> ${move.id.substring(0, 8)}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Issue Date:</strong> ${issueDateDisplay}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Due Date:</strong> ${dueDateDisplay}</p>
           </div>
           <div style="width: 48%;">
             <p style="margin: 5px 0; font-size: 14px;"><strong>Client:</strong> ${move.client?.name || 'N/A'}</p>
-            <p style="margin: 5px 0; font-size: 14px;"><strong>Status:</strong> ${move.status.replace(/_/g, ' ')}</p>
+            <p style="margin: 5px 0; font-size: 14px;"><strong>Status:</strong> ${statusDisplay}</p>
           </div>
         </div>
 
-        <h2 style="font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px;">Quote Breakdown</h2>
+        <h2 style="font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px;">Line Item Breakdown</h2>
         <table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">
           <thead>
             <tr>
@@ -120,21 +145,21 @@ export function Move() {
         <div style="text-align: right;">
           <div style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px;">
             <span>Subtotal:</span>
-            <span>$${approvedQuote.subtotal.toFixed(2)}</span>
+            <span>$${subtotalToUse.toFixed(2)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; padding: 5px 0; font-size: 15px;">
             <span>Tax:</span>
-            <span>$${approvedQuote.tax.toFixed(2)}</span>
+            <span>$${taxToUse.toFixed(2)}</span>
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 22px; font-weight: bold; color: #2c3e50; border-top: 1px solid #eee; padding-top: 10px; margin-top: 10px;">
             <span>Total:</span>
-            <span>$${approvedQuote.total.toFixed(2)}</span>
+            <span>$${totalAmountDisplay}</span>
           </div>
         </div>
 
-        ${approvedQuote.client_notes ? `
+        ${clientNotesToUse ? `
           <h2 style="font-size: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 20px; margin-top: 30px;">Client Notes</h2>
-          <p>${approvedQuote.client_notes}</p>
+          <p>${clientNotesToUse}</p>
         ` : ''}
 
         <div style="text-align: center; font-size: 12px; color: #777; margin-top: 40px;">
@@ -187,7 +212,8 @@ export function Move() {
   const handleDownloadInvoice = async () => {
     const pdf = await generateInvoicePdf();
     if (pdf) {
-      pdf.save(`invoice-${move?.id.substring(0, 8)}.pdf`);
+      const invoiceNumber = move?.invoices?.[0]?.invoice_number || move?.id?.substring(0, 8);
+      pdf.save(`invoice-${invoiceNumber}.pdf`);
       toast.success('Invoice downloaded successfully! Check your device\'s downloads folder.');
     }
   }
@@ -222,6 +248,9 @@ export function Move() {
     )
   }
 
+  // Get the first invoice if available
+  const currentInvoice = move.invoices.length > 0 ? move.invoices[0] : null;
+
   return (
     <div className="p-4 space-y-6">
       {/* Header */}
@@ -241,7 +270,7 @@ export function Move() {
       {/* Move Information */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Job Information</h2>
-        
+
         <div className="space-y-4">
           <div className="flex items-start space-x-3">
             <MapPin className="h-5 w-5 text-gray-400 mt-0.5" />
@@ -292,10 +321,56 @@ export function Move() {
         </div>
       </div>
 
+      {/* Invoice Information */}
+      {currentInvoice && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Invoice Details</h2>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-3">
+              <FileText className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Invoice Number</p>
+                <p className="text-sm text-gray-600">{currentInvoice.invoice_number || 'N/A'}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Calendar className="h-5 w-5 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-900">Issue Date</p>
+                <p className="text-sm text-gray-600">{new Date(currentInvoice.issue_date).toLocaleDateString('en-US')}</p>
+              </div>
+            </div>
+            {currentInvoice.due_date && (
+              <div className="flex items-center space-x-3">
+                <Calendar className="h-5 w-5 text-gray-400" />
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Due Date</p>
+                  <p className="text-sm text-gray-600">{new Date(currentInvoice.due_date).toLocaleDateString('en-US')}</p>
+                </div>
+              </div>
+            )}
+            <div className="flex items-center space-x-3">
+              <span className="text-lg font-bold text-gray-400">$</span>
+              <div>
+                <p className="text-sm font-medium text-gray-900">Total Amount</p>
+                <p className="text-lg font-semibold text-gray-900">${currentInvoice.total_amount.toFixed(2)}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <StatusBadge status={currentInvoice.status} /> {/* Re-using StatusBadge for invoice status */}
+              <div>
+                <p className="text-sm font-medium text-gray-900">Payment Status</p>
+                <p className="text-sm text-gray-600">{currentInvoice.status.replace(/_/g, ' ')}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Status Information */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Current Status</h3>
-        
+
         <div className="space-y-3">
           {move.status === 'quote_sent' && (
             <p className="text-gray-600">Your quote has been sent and is awaiting your approval.</p>
@@ -315,10 +390,39 @@ export function Move() {
         </div>
       </div>
 
+      {/* Recent Updates (from move_updates table) */}
+      {move.move_updates && move.move_updates.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Updates</h3>
+          <div className="space-y-3">
+            {move.move_updates.map((update) => (
+              <div key={update.id} className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
+                <MessageSquare className="h-5 w-5 text-blue-600 flex-shrink-0 mt-1" />
+                <div>
+                  <p className="font-medium text-gray-900">{update.title}</p>
+                  {update.description && (
+                    <p className="text-sm text-gray-600 mt-1">{update.description}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {new Date(update.created_at).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Actions</h3>
-        
+
         <div className="space-y-3">
           <button
             onClick={handleDownloadInvoice}
