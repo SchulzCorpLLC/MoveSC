@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Calendar, ArrowRight, MessageSquare } from 'lucide-react'
+import { MapPin, Calendar, ArrowRight, MessageSquare, PlusCircle } from 'lucide-react' // Added PlusCircle
 import { supabase, type Database } from '../lib/supabase'
 import { useClient } from '../hooks/useClient'
 import { ProgressBar } from '../components/ProgressBar'
@@ -214,6 +214,18 @@ export function Dashboard() {
                 <p className="text-xs text-gray-500">Recent notifications</p>
               </div>
             </Link>
+
+            {/* New Quick Action: Request New Quote */}
+            <Link
+              to="/request-quote"
+              className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
+            >
+              <div className="text-center">
+                <PlusCircle className="mx-auto h-8 w-8 text-blue-600 mb-1" />
+                <p className="text-sm font-medium text-gray-900">New Quote</p>
+                <p className="text-xs text-gray-500">Request a new move</p>
+              </div>
+            </Link>
           </div>
 
           {/* Recent Moves */}
@@ -253,16 +265,16 @@ export function Dashboard() {
           </p>
           <div className="grid grid-cols-2 gap-4 max-w-sm mx-auto">
             <Link
-              to="/profile"
+              to="/request-quote"
               className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
             >
-              Complete Profile
+              Request a New Quote
             </Link>
             <Link
-              to="/documents"
+              to="/profile"
               className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
             >
-              Upload Documents
+              Complete Profile
             </Link>
           </div>
         </div>
